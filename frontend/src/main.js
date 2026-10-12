@@ -289,12 +289,13 @@ class HomePlan3DView extends HTMLElement {
       return b;
     };
     if (!this.editing && this.plan.floors.length > 1) {
-      f.append(mk("Alle", !this.cut ? "on" : "", () => { this.cut = false; this.renderBar(); this.rebuild3D(); }, "Ganzes Gebäude"));
+      f.append(mk("Alle", !this.cut ? "on" : "", () => { this.cut = false; this.renderBar(); this.rebuild3D(); this.flyToFloor(null); }, "Ganzes Gebäude"));
     }
     for (let i = this.plan.floors.length - 1; i >= 0; i--) {
       const fl = this.plan.floors[i];
       f.append(mk(fl.name, i === this.fi && (this.editing || this.cut) ? "on" : "", () => {
         this.fi = i; this.cut = true; this.sel = null; this.renderBar(); this.rebuild3D(); this.draw2D(); this.renderSide();
+        this.flyToFloor(i);
       }));
     }
     if (this.editing) f.append(mk("+", "", () => {
@@ -773,6 +774,7 @@ class HomePlan3DView extends HTMLElement {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI / 2.02;
+    this.controls.addEventListener("start", () => { this._fly = null; }); // grabbing the view stops a camera flight
     this.ambient = new THREE.AmbientLight(0x8090c0, 0.9);
     this.scene.add(this.ambient);
     this.sunLight = new THREE.DirectionalLight(0xffffff, 0.7);
@@ -799,6 +801,14 @@ class HomePlan3DView extends HTMLElement {
       this.controls.update();
       const t = performance.now() / 1000, dt = Math.min(0.1, t - last);
       last = t;
+      if (this._fly) {
+        const fl = this._fly;
+        fl.t = Math.min(1, fl.t + dt / 0.8);
+        const k = fl.t * fl.t * (3 - 2 * fl.t);
+        this.camera.position.lerpVectors(fl.p0, fl.p1, k);
+        this.controls.target.lerpVectors(fl.t0, fl.t1, k);
+        if (fl.t >= 1) this._fly = null;
+      }
       this.dyn.forEach((d) => { if (d.pulse && d.on) d.glow.scale.setScalar(d.baseScale * (1 + 0.05 * Math.sin(t * 3))); });
       this.features.forEach((f) => { if (f.on) f.tick(dt, t); });
       this.renderer.render(this.scene, this.camera);
@@ -831,6 +841,24 @@ class HomePlan3DView extends HTMLElement {
     this.controls.target.set(cx, top / 2, cz);
     this.camera.position.set(cx + size * 0.55, top + size * 0.75, cz + size * 0.95);
     this.cam2 = { x: cx, z: cz, s: Math.max(8, Math.min(120, 500 / size)) };
+  }
+
+  /** Fly the camera to look at floor i (a number) or at the whole building (null), keeping the viewing direction. */
+  flyToFloor(i) {
+    if (!this.camera || !this.controls) return;
+    let pts;
+    if (i == null) { const bb = this.extent(); if (!bb) return; pts = [[bb[0], bb[1]], [bb[2], bb[3]]]; }
+    else { const fl = this.plan.floors[i]; pts = fl?.rooms.flatMap((r) => r.points); if (!pts?.length) return; }
+    const [x0, z0, x1, z1] = bbox(pts);
+    const size = Math.max(x1 - x0, z1 - z0, 4);
+    const elev = i == null ? elevation(this.plan, this.plan.floors.length - 1) / 2 : elevation(this.plan, i) + (this.plan.floors[i].height || 2.6) / 2;
+    const target = new THREE.Vector3((x0 + x1) / 2, Math.max(0, elev), (z0 + z1) / 2);
+    const dir = this.camera.position.clone().sub(this.controls.target);
+    if (dir.lengthSq() < 1e-6) dir.set(0.55, 0.75, 0.95);
+    dir.normalize();
+    if (dir.y < 0.35) { dir.y = 0.35; dir.normalize(); } // look down at least a bit
+    const dist = size * (i == null ? 1.35 : 1.15) + 3;
+    this._fly = { t: 0, p0: this.camera.position.clone(), p1: target.clone().addScaledVector(dir, dist), t0: this.controls.target.clone(), t1: target };
   }
 
   rebuild3D() {
