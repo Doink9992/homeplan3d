@@ -661,6 +661,11 @@ export function buildSite(plan, ctx, opts = {}) {
           if (base + (s.h || 2.7) >= e - 0.35 && poly.every((p) => inPoly(p, b.points))) slabShape.holes.push(new THREE.Path(poly.map((p) => new THREE.Vector2(p[0], -p[1]))));
         });
       });
+      // rooms of a house floor on this level with a lower floor (room.dy < 0) have their own floor: no storey slab there
+      plan.floors.forEach((fl2, k) => {
+        if (Math.abs(elevation(plan, k) - e) > 0.02) return;
+        fl2.rooms.filter((r) => r.dy < 0 && r.points.every((p) => inPoly(p, b.points))).forEach((r) => slabShape.holes.push(new THREE.Path(r.points.map((p) => new THREE.Vector2(p[0], -p[1])))));
+      });
       const slab = new THREE.ExtrudeGeometry(slabShape, { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
       const sm = new THREE.Mesh(slab, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.35, transparent: true, opacity: day ? 0.9 : 0.45, side: THREE.DoubleSide, depthWrite: false }));
       sm.rotation.x = -Math.PI / 2;
@@ -774,7 +779,7 @@ export function buildBuilding(plan, opts) {
       const mat = new THREE.MeshStandardMaterial({ color: c.clone().multiplyScalar(th.floorK), emissive: c, emissiveIntensity: th.floorEm * dim, side: THREE.DoubleSide });
       const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: st.slab, bevelEnabled: false, curveSegments: 1 }), mat);
       mesh.rotation.x = Math.PI / 2;
-      mesh.position.y = 0;
+      mesh.position.y = r.dy || 0; // dy: this room's floor lies lower (negative) or higher than the storey
       mesh.userData = { room: r.id, floor: fl.id };
       g.add(mesh);
       ctx.pickables.push(mesh);

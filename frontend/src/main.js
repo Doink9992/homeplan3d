@@ -433,6 +433,7 @@ class HomePlan3DView extends HTMLElement {
           { k: "name", l: "Name" },
           { k: "area", l: "HA-Bereich (Geräte automatisch)", t: "select", o: [["", "– keiner –"], ...areas.map((a) => [a.area_id, a.name]), ...(obj.area && !areas.some((a) => a.area_id === obj.area) ? [[obj.area, obj.area]] : [])] },
           { k: "color", l: "Farbe", t: "color" },
+          { k: "dy", l: "Boden höher / tiefer als die Etage (m, tiefer = negativ)", t: "number", s: 0.05, p: "0" },
           { k: "autoDevices", l: "Geräte aus dem HA-Bereich automatisch platzieren", t: "checkbox", def: true },
           { k: "climate.temperature", l: "Temperatur-Sensor", list: "ents", p: auto.temperature ? `automatisch: ${auto.temperature}` : "" },
           { k: "climate.humidity", l: "Feuchte-Sensor", list: "ents", p: auto.humidity ? `automatisch: ${auto.humidity}` : "" },

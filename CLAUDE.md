@@ -34,7 +34,7 @@ Koordinaten in Metern, x nach rechts, z nach unten (Draufsicht), y nach oben. M�
 
 ```
 floors[]  { id, name, elevation?, height, rooms[], walls[], openings[], devices[], furniture[] }
-  rooms[]      { id, name, area, color, points[[x,z]], wallT[], wallH[], climate{temperature,humidity,co2}, autoDevices? }
+  rooms[]      { id, name, area, color, points[[x,z]], wallT[], wallH[], climate{temperature,humidity,co2}, autoDevices?, dy? (Boden dieses Raums tiefer/höher als die Etage; im Anbau ohne Geschossplatte) }
   walls[]      { id, a, b, t, h }                      freie Wände
   openings[]   { id, type door|window, x, z, rot, w, h, sill, style, hinge, swing, entity }
   devices[]    { id, entity, x, z, y, name, showName }
