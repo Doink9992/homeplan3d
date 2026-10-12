@@ -53,10 +53,14 @@ test("no layout, or nothing to lay out", () => {
 });
 
 test("pv grid fills the roof", () => {
-  const g = pvGrid({ L: 23, W: 2.9, pitchDeg: 12, portrait: false });
+  const g = pvGrid({ L: 23, W: 2.9, pitchDeg: 12, orientation: "landscape" });
   assert.equal(g.rows, 2);
   assert.equal(g.cols, 12);
   assert.equal(g.modules.length, 24);
+  // automatic orientation picks whichever fits more modules, the legacy boolean still works
+  assert.equal(pvGrid({ L: 23, W: 2.9, pitchDeg: 12 }).modules.length, 24);
+  assert.equal(pvGrid({ L: 23, W: 2.6, pitchDeg: 12 }).portrait, true); // too shallow for two landscape rows -> portrait
+  assert.equal(pvGrid({ L: 23, W: 2.9, pitchDeg: 12, portrait: false }).portrait, false);
   const manual = pvGrid({ L: 23, W: 2.9, pitchDeg: 12, fill: false, rows: 1, cols: 3 });
   assert.equal(manual.modules.length, 3);
   // modules stay on the roof

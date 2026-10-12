@@ -41,15 +41,25 @@ export function layoutParts(L, layout) {
   return [...part("garage", 0, garLen), ...part("open", garLen, garLen + gap), ...part("carport", L - carLen, L, carport)];
 }
 
-/** PV module grid on a shed roof: columns along the ridge, rows up the slope. Sizes in metres. */
-export function pvGrid({ L, W, pitchDeg, portrait = false, fill = true, rows, cols, margin = 0.3, gap = 0.02 }) {
-  const mw = portrait ? 1.134 : 1.722; // along the ridge
-  const mh = portrait ? 1.722 : 1.134; // up the slope
+/**
+ * PV module grid on a shed roof: columns along the ridge, rows up the slope. Sizes in metres.
+ * orientation: "landscape" | "portrait" | "auto" (whichever fits more modules; legacy `portrait` boolean is honoured).
+ */
+export function pvGrid({ L, W, pitchDeg, orientation, portrait, fill = true, rows, cols, margin = 0.25, gap = 0.02 }) {
   const Ls = W / Math.cos((pitchDeg * Math.PI) / 180);
-  const c = fill ? Math.floor((L - 2 * margin + gap) / (mw + gap)) : Math.max(0, Math.round(cols ?? 1));
-  const r = fill ? Math.floor((Ls - 2 * margin + gap) / (mh + gap)) : Math.max(0, Math.round(rows ?? 1));
-  const out = [];
-  for (let i = 0; i < c; i++)
-    for (let j = 0; j < r; j++) out.push({ u: (i - (c - 1) / 2) * (mw + gap), s: Ls / 2 + (j - (r - 1) / 2) * (mh + gap), mw, mh });
-  return { cols: c, rows: r, modules: out, slope: Ls };
+  const grid = (por) => {
+    const mw = por ? 1.134 : 1.722; // along the ridge
+    const mh = por ? 1.722 : 1.134; // up the slope
+    const c = fill ? Math.max(0, Math.floor((L - 2 * margin + gap) / (mw + gap))) : Math.max(0, Math.round(cols ?? 1));
+    const r = fill ? Math.max(0, Math.floor((Ls - 2 * margin + gap) / (mh + gap))) : Math.max(0, Math.round(rows ?? 1));
+    const modules = [];
+    for (let i = 0; i < c; i++)
+      for (let j = 0; j < r; j++) modules.push({ u: (i - (c - 1) / 2) * (mw + gap), s: Ls / 2 + (j - (r - 1) / 2) * (mh + gap), mw, mh });
+    return { cols: c, rows: r, modules, slope: Ls, portrait: por };
+  };
+  const o = orientation && orientation !== "auto" ? orientation : portrait != null && orientation !== "auto" ? (portrait ? "portrait" : "landscape") : "auto";
+  if (o === "portrait") return grid(true);
+  if (o === "landscape") return grid(false);
+  const a = grid(false), b = grid(true);
+  return b.modules.length > a.modules.length ? b : a;
 }

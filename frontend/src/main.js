@@ -470,7 +470,7 @@ class HomePlan3DView extends HTMLElement {
         { k: "layout.garageLen", l: "Garagenlänge (m, leer = Rest)", t: "number", s: 0.1 },
       ])}<h4>Photovoltaik auf dem Dach</h4>${this.formHtml(obj, [
         { k: "pv.enabled", l: "PV-Module auf dem Dach", t: "checkbox" }, { k: "pv.fill", l: "Dachfläche füllen", t: "checkbox", def: true },
-        { k: "pv.portrait", l: "Module hochkant", t: "checkbox" }, { k: "pv.rows", l: "Reihen (ohne Füllen)", t: "number", s: 1 }, { k: "pv.cols", l: "Module je Reihe (ohne Füllen)", t: "number", s: 1 },
+        { k: "pv.orientation", l: "Modulausrichtung", t: "select", o: [["auto", "automatisch (mehr Module)"], ["landscape", "quer"], ["portrait", "hochkant"]], def: "auto" }, { k: "pv.rows", l: "Reihen (ohne Füllen)", t: "number", s: 1 }, { k: "pv.cols", l: "Module je Reihe (ohne Füllen)", t: "number", s: 1 },
         { k: "pv.wp", l: "Leistung je Modul (Wp)", t: "number", s: 10, p: "420" }, { k: "pv.entity", l: "Leistungs-Sensor dieser Anlage", list: "ents" },
       ])}` : ""}`;
     }

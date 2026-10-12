@@ -473,7 +473,7 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
   // PV modules on the roof
   const pv = b.pv;
   if (pv && pv.enabled !== false) {
-    const grid = pvGrid({ L, W, pitchDeg: roof.pitch ?? 12, portrait: !!pv.portrait, fill: pv.fill !== false, rows: pv.rows, cols: pv.cols });
+    const grid = pvGrid({ L, W, pitchDeg: roof.pitch ?? 12, orientation: pv.orientation, portrait: pv.portrait, fill: pv.fill !== false, rows: pv.rows, cols: pv.cols });
     const mat = new THREE.MeshStandardMaterial({ color: 0x0b1530, emissive: 0x1f6bff, emissiveIntensity: 0.15, metalness: 0.4, roughness: 0.3 });
     const line = new THREE.LineBasicMaterial({ color: 0x5aa0ff });
     const cos = Math.cos(pitch), sin = Math.sin(pitch);
