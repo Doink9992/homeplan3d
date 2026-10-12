@@ -47,6 +47,7 @@ Geräte erscheinen automatisch, wenn ein Raum einen HA-Bereich (`area`) hat; `hi
 
 ## Regeln
 
+- **Repo immer aktuell halten.** Jede Änderung sofort committen und pushen (ausgelieferte Stände zusätzlich als Release), damit man von jedem Rechner aus weitermachen kann. Vor dem Push: Frontend bauen (das gebaute `www/homeplan3d.js` gehört ins Repo) und Tests laufen lassen.
 - **Keine persönlichen Daten ins Repo.** Der Ordner `import/` ist ignoriert (NeonPlan-Export, Katasterplan, erzeugte Plan-/Gelände-Dateien). Das Gebäude liegt in Home Assistant und lässt sich im Editor mit „Plan als Datei sichern“ exportieren.
 - Beim Ändern des Datenmodells `normalizePlan` in `plan.js` abwärtskompatibel halten.
 - NeonPlan 3D wird nur als Datenquelle gelesen (Websocket `neonplan3d/building/get`), es wird nichts verändert.
