@@ -34,7 +34,7 @@ export class CameraFeature extends Feature {
     const floorElev = (i) => anchors.rooms.find((r) => r.floor === i)?.elev ?? 0;
     this.cams = anchors.devices.filter((a) => a.kind === "camera").map((a) => {
       const d = a.d;
-      const cam = { a, d, entity: a.entity, rot: d.rot ?? 0, tilt: d.tilt ?? 25, fov: d.fov ?? 90, reach: d.reach ?? 7, fe: floorElev(a.floor) };
+      const cam = { a, d, entity: a.entity, rot: d.rot ?? 0, tilt: d.tilt ?? 25, fov: d.fov ?? 90, reach: d.reach ?? 7, fe: d.groundY ?? floorElev(a.floor) }; // groundY: where the field of view lies (a camera over the yard)
       // field of view on the floor
       const pts = wedge(a.x, a.z, cam.rot, cam.fov, cam.reach);
       const pos = [];

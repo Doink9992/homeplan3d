@@ -898,7 +898,7 @@ class HomePlan3DView extends HTMLElement {
     const ext = this.extent();
     if (ext) {
       const grid = new THREE.GridHelper(120, 120, this.theme === "day" ? 0xb8c2d6 : 0x1d3057, this.theme === "day" ? 0xcfd6e6 : 0x101c36);
-      grid.position.set((ext[0] + ext[2]) / 2, Math.min(0, elevation(this.plan, 0)) - (this.plan.settings.slab ?? 0.18) - 0.02, (ext[1] + ext[3]) / 2);
+      grid.position.set((ext[0] + ext[2]) / 2, this.plan.site?.groundY != null ? this.plan.site.groundY - 0.02 : Math.min(0, elevation(this.plan, 0)) - (this.plan.settings.slab ?? 0.18) - 0.02, (ext[1] + ext[3]) / 2);
       this.world.add(grid);
     }
     this.updateStates();

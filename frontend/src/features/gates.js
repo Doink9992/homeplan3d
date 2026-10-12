@@ -20,6 +20,7 @@ export class GatesFeature extends Feature {
     const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.2, transparent: true, opacity: day ? 0.9 : 0.4, side: THREE.DoubleSide, depthWrite: false });
     const edge = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.95 });
     const posts = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.3 });
+    this.group.position.y = this.plan.site?.groundY ?? 0; // gates stand on the yard
     this.gates = (this.plan.site?.gates || []).filter((g) => g.a && g.b).map((cfg) => {
       const h = cfg.h || 2.0;
       const len = Math.hypot(cfg.b[0] - cfg.a[0], cfg.b[1] - cfg.a[1]), half = cfg.single ? len : len / 2; // single: one leaf hung at a (a small door)

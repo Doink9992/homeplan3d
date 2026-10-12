@@ -47,6 +47,7 @@ site      { north, cadastreHouse, buildings[ { id, name, points, height, levels,
                len leer = teilt sich den Rest; doorSide low|high|west|east (Standard low); numberFrom east|west (Standard east)
   openings[]   { type arch|door, x, z, rot (° Wandrichtung), w, h, elev? } Rahmen/Torbogen an einer Gebäudewand
   site.decks[] { name?, points[[x,z]] (Kante 0 liegt an der Hauswand), elev? (Standard 0 = Erdgeschoss), rail?, railSkip? [Kanten ohne Geländer] } Terrassen des Hauses
+  site.groundY Höhe des Hofs (z. B. -1.7). Gebäude mit levels > 1 / baseY behalten Höhen ab ±0,00 und reichen bis zum Hof; andere stehen auf dem Hof. Möbel/Geräte im Hof: baseY bzw. y, Kameras: groundY
   site.gates[] { name, entity?, single? (ein Flügel = Türchen), barsA?, a[x,z], b[x,z], h?, inward? [dx,dz] (Aufschwenken, Standard Osten), openStates?, closedStates? } Doppeltor; Zustand "Auf"/"Zu" z. B. von einer Frigate-Zustandsklassifizierung
   balconies[]  { name?, points[[x,z]] (Kante 0 liegt an der Wand), elev? (Standard: erstes Geschoss), rail? }
   pv{}         { enabled, fill, rows, cols, orientation, over ("#<Index eines Teils>"), edge, wp, entity }

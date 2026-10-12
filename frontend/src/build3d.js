@@ -216,8 +216,8 @@ function buildFurniture(f, elev, ctx) {
   }
 
   const entry = { mats, group: g };
-  const top = y0 + h;
-  ctx.anchors.furniture.push({ f, floor: ctx.cur.i, x: f.x, z: f.z, y: ctx.cur.elev + y0, top: ctx.cur.elev + top, w, d, h, group: g, mats });
+  const top = y0 + h + (f.baseY || 0);
+  ctx.anchors.furniture.push({ f, floor: ctx.cur.i, x: f.x, z: f.z, y: ctx.cur.elev + y0 + (f.baseY || 0), top: ctx.cur.elev + top, w, d, h, group: g, mats });
   if (f.entity || f.stateEntity) {
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     glow.scale.setScalar(Math.max(1, w * 2));
@@ -620,16 +620,29 @@ export function buildSite(plan, ctx, opts = {}) {
   // terraces and other platforms that belong to the main house (site.decks), on the level of the floor they open from
   (plan.site?.decks || []).forEach((d) => addDeck(d, d.elev ?? 0, "deck"));
 
+  // The yard can lie lower than the house's ground floor (site.groundY, e.g. -1.7). Buildings that follow the house
+  // floors (levels > 1, or baseY set) keep their heights from the house datum and reach down to the yard; all others
+  // stand on the yard, so their heights count from it.
+  const groundY = plan.site?.groundY ?? 0;
   buildings.forEach((b) => {
     if (b.visible === false || !b.points || b.points.length < 3) return;
     if (b.roof?.type === "shed" || b.layout || b.parts?.length) {
-      group.add(buildShedBuilding(plan, b, ctx, opts, { wallMat, lineMat, roofMats, col }));
+      const sg = buildShedBuilding(plan, b, ctx, opts, { wallMat, lineMat, roofMats, col });
+      if (groundY) {
+        sg.position.y = groundY;
+        ctx.anchors.pv.forEach((a) => { if (a.site === b.id) a.pos.y += groundY; });
+      }
+      group.add(sg);
       return;
     }
+    const abs = b.levels > 1 || b.baseY != null;
+    const base = abs ? Math.min(0, b.baseY ?? groundY) : 0;
+    const n0 = group.children.length;
     const h = b.height || 3;
-    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: h, bevelEnabled: false, curveSegments: 1 });
+    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: h - base, bevelEnabled: false, curveSegments: 1 });
     const prism = new THREE.Mesh(geo, wallMat);
     prism.rotation.x = -Math.PI / 2; // shape (x,-z) -> world (x, up, z)
+    prism.position.y = base;
     prism.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), lineMat));
     prism.userData = { site: b.id };
     prism.renderOrder = 1;
@@ -701,6 +714,7 @@ export function buildSite(plan, ctx, opts = {}) {
       sp.position.set(lp[0], top + 0.1, lp[1]);
       group.add(sp);
     }
+    if (!abs && groundY) group.children.slice(n0).forEach((c) => { c.position.y += groundY; });
   });
   return group;
 }
