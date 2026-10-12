@@ -93,6 +93,18 @@ function buildFurniture(f, elev, ctx) {
 
   switch (f.type) {
     case "stairs_u": {
+      if (f.landings === 2) {
+        // U opening to the west with two landings: the lower flight runs east along the front (+z) arm, landing in the
+        // front-east corner, up along the east arm, landing in the back-east corner, then west along the back arm
+        const n = Math.max(12, 2 * Math.round(h / 0.18 / 2)), r = h / n, aw = Math.min(1.2, w / 3, d / 3), m = f.flip ? -1 : 1;
+        const a = Math.max(2, Math.round(n * 0.31)), b = Math.max(1, n - 2 - 2 * a), L1 = w - aw, L2 = d - 2 * aw;
+        for (let i = 0; i < a; i++) add(box(L1 / a, (i + 1) * r, aw, 0, m * (-w / 2 + (i + 0.5) * (L1 / a)), d / 2 - aw / 2));
+        add(box(aw, (a + 1) * r, aw, 0, m * (w / 2 - aw / 2), d / 2 - aw / 2));
+        for (let k = 0; k < b; k++) add(box(aw, (a + 2 + k) * r, L2 / b, 0, m * (w / 2 - aw / 2), d / 2 - aw - (k + 0.5) * (L2 / b)));
+        add(box(aw, (a + b + 2) * r, aw, 0, m * (w / 2 - aw / 2), -d / 2 + aw / 2));
+        for (let j = 0; j < a; j++) add(box(L1 / a, (a + b + 3 + j) * r, aw, 0, m * (w / 2 - aw - (j + 0.5) * (L1 / a)), -d / 2 + aw / 2));
+        break;
+      }
       // U-shaped: the lower flight starts at the front (+z) on the east half, a landing at the back, the upper flight returns on the west half
       const n = Math.max(8, 2 * Math.round(h / 0.18 / 2)), half = n / 2, land = Math.min(1.2, d * 0.25), sd = (d - land) / half, fw = w / 2 - 0.02;
       const m = f.flip ? -1 : 1; // flip mirrors the stair: the lower flight on the west half
