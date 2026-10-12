@@ -775,6 +775,9 @@ class HomePlan3DView extends HTMLElement {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI / 2.02;
+    // left: rotate, middle or right: move the view, wheel: zoom
+    this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+    this.renderer.domElement.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); }); // no browser auto-scroll on the middle button
     this.controls.addEventListener("start", () => { this._fly = null; }); // grabbing the view stops a camera flight
     this.ambient = new THREE.AmbientLight(0x8090c0, 0.9);
     this.scene.add(this.ambient);
