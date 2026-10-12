@@ -95,9 +95,10 @@ function buildFurniture(f, elev, ctx) {
     case "stairs_u": {
       // U-shaped: the lower flight starts at the front (+z) on the east half, a landing at the back, the upper flight returns on the west half
       const n = Math.max(8, 2 * Math.round(h / 0.18 / 2)), half = n / 2, land = Math.min(1.2, d * 0.25), sd = (d - land) / half, fw = w / 2 - 0.02;
-      for (let i = 0; i < half; i++) add(box(fw, ((i + 1) * h) / n, sd, 0, w / 4, d / 2 - (i + 0.5) * sd));
+      const m = f.flip ? -1 : 1; // flip mirrors the stair: the lower flight on the west half
+      for (let i = 0; i < half; i++) add(box(fw, ((i + 1) * h) / n, sd, 0, (m * w) / 4, d / 2 - (i + 0.5) * sd));
       add(box(w, h / 2, land, 0, 0, -d / 2 + land / 2));
-      for (let j = 0; j < half; j++) add(box(fw, h / 2 + ((j + 1) * h) / n, sd, 0, -w / 4, -d / 2 + land + (j + 0.5) * sd));
+      for (let j = 0; j < half; j++) add(box(fw, h / 2 + ((j + 1) * h) / n, sd, 0, (-m * w) / 4, -d / 2 + land + (j + 0.5) * sd));
       break;
     }
     case "stairs": {

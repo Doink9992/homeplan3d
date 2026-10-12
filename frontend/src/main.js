@@ -471,6 +471,7 @@ class HomePlan3DView extends HTMLElement {
       obj = find(fl.furniture, s.id);
       if (obj) selHtml += `<h4>Möbel</h4>${this.formHtml(obj, [
         { k: "type", l: "Typ", t: "select", o: FURN_TYPES }, { k: "name", l: "Name" }, { k: "color", l: "Farbe (leer = Standard)", t: "color" },
+        ...(obj.type === "stairs_u" ? [{ k: "flip", l: "Gespiegelt (unterer Lauf auf der anderen Seite)", t: "checkbox" }] : []),
         ...(obj.type === "car" ? [{ k: "body", l: "Karosserie", t: "select", o: [["", "einfach"], ["sedan", "Limousine"], ["wagon", "Kombi"], ["hatch", "Schrägheck / Crossover"], ["van", "Kastenwagen"], ["roadster", "Roadster"]] }] : []), { k: "rot", l: "Drehung (°)", t: "number", s: 5 },
         { k: "w", l: "Breite", t: "number" }, { k: "d", l: "Tiefe", t: "number" }, { k: "h", l: "Höhe", t: "number" }, { k: "mountY", l: "Höhe über Boden", t: "number", p: "0" },
         { k: "entity", l: "Entität (Zustand/Leuchten)", list: "ents" }, { k: "power", l: "Leistungs-Sensor", list: "ents" },
