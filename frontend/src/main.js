@@ -1390,6 +1390,13 @@ class HomePlan3DView extends HTMLElement {
         x.fillStyle = "#ffb347"; x.font = `${10 * dpr}px sans-serif`; x.textAlign = "center";
         x.fillText(d.name || "Terrasse", lp3[0], lp3[1]);
       });
+      (this.plan.site?.gates || []).forEach((g) => {
+        if (!g.a || !g.b) return;
+        const p1 = this.w2s(g.a), p2 = this.w2s(g.b);
+        x.save(); x.setLineDash([]); x.strokeStyle = "#9aa5c0"; x.lineWidth = 4 * dpr; x.beginPath(); x.moveTo(...p1); x.lineTo(...p2); x.stroke(); x.restore();
+        x.fillStyle = "#9aa5c0"; x.font = `${10 * dpr}px sans-serif`; x.textAlign = "left";
+        x.fillText(g.name || "Tor", p1[0] + 6 * dpr, (p1[1] + p2[1]) / 2);
+      });
       if (this.plan.site?.cadastreHouse) { this.path(x, this.plan.site.cadastreHouse, true); x.strokeStyle = "#3ddc84"; x.lineWidth = 1.5 * dpr; x.stroke(); }
       x.setLineDash([]);
     }
