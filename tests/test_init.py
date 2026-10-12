@@ -1,4 +1,5 @@
 """Integration tests: setup, panel registration and the plan websocket API."""
+from homeassistant.loader import async_get_integration
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.homeplan3d.const import DOMAIN
@@ -75,4 +76,5 @@ async def test_reload_entry_keeps_panel(hass):
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     assert "homeplan3d" in hass.data["frontend_panels"]
-    assert hass.data[DOMAIN]["url"].startswith("/homeplan3d_static/homeplan3d.js?v=0.1.")
+    version = (await async_get_integration(hass, DOMAIN)).version
+    assert hass.data[DOMAIN]["url"].startswith(f"/homeplan3d_static/homeplan3d.js?v={version}")
