@@ -1303,6 +1303,15 @@ class HomePlan3DView extends HTMLElement {
         x.fillStyle = "#ffb347"; x.font = `${12 * dpr}px sans-serif`; x.textAlign = "center";
         x.fillText(`${b.name} (${polyArea(b.points).toFixed(0)} m²${b.levels > 1 ? `, ${b.levels} Geschosse` : ""})`, lp[0], lp[1]);
         if (sel) b.points.forEach((p) => { const q = this.w2s(p); x.fillStyle = "#fff"; x.fillRect(q[0] - 4 * dpr, q[1] - 4 * dpr, 8 * dpr, 8 * dpr); });
+        (b.balconies || []).forEach((bc) => {
+          if (!bc.points?.length) return;
+          this.path(x, bc.points, true);
+          x.fillStyle = "rgba(255,179,71,.18)"; x.fill();
+          x.strokeStyle = "#ffb347"; x.lineWidth = dpr; x.stroke();
+          const lp2 = this.w2s(labelPoint(bc.points));
+          x.fillStyle = "#ffb347"; x.font = `${10 * dpr}px sans-serif`; x.textAlign = "center";
+          x.fillText(bc.name || "Balkon", lp2[0], lp2[1]);
+        });
         if (b.roof?.type === "shed") {
           const fr = siteFrame(b.points, b.roof, this.plan.site?.north ?? 0);
           x.setLineDash([]);

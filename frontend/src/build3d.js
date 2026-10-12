@@ -611,6 +611,38 @@ export function buildSite(plan, ctx, opts = {}) {
       group.add(sm);
     });
 
+    // balconies: platform on the level of a storey (default: the first one above ground) with a railing on every edge
+    // except the first one, which is the one on the building wall
+    (b.balconies || []).forEach((bc) => {
+      if (!bc.points || bc.points.length < 3) return;
+      const e = bc.elev ?? (b.storeys || []).find((s) => s > 0.05) ?? 2.8, rail = bc.rail ?? 1.0;
+      const slab = new THREE.ExtrudeGeometry(new THREE.Shape(bc.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
+      const sm = new THREE.Mesh(slab, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.35, transparent: true, opacity: day ? 0.9 : 0.5, side: THREE.DoubleSide, depthWrite: false }));
+      sm.rotation.x = -Math.PI / 2;
+      sm.position.y = e - 0.18;
+      sm.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab, 25), lineMat));
+      sm.userData = { site: b.id };
+      group.add(sm);
+      ctx.pickables.push(sm);
+      const pos = [];
+      for (let i = 1; i < bc.points.length; i++) {
+        const p = bc.points[i], q = bc.points[(i + 1) % bc.points.length];
+        pos.push(p[0], e, p[1], q[0], e, q[1], q[0], e + rail, q[1], p[0], e, p[1], q[0], e + rail, q[1], p[0], e + rail, p[1]);
+      }
+      const rg = new THREE.BufferGeometry();
+      rg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      rg.computeVertexNormals();
+      const rm = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+      rm.add(new THREE.LineSegments(new THREE.EdgesGeometry(rg, 5), lineMat));
+      group.add(rm);
+      if (opts.label && bc.name) {
+        const sp = opts.label(bc.name, ctx.theme);
+        const c = labelPoint(bc.points);
+        sp.position.set(c[0], e + 0.06, c[1]);
+        group.add(sp);
+      }
+    });
+
     let top = h;
     const roof = b.roof || {};
     if (roof.type === "gable" && b.points.length === 4) {
