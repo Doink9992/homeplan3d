@@ -20,12 +20,13 @@ export class WasteFeature extends Feature {
     const tex = glowTexture();
     this.bins = anchors.furniture.filter((a) => a.f.type === "bin").map((a) => {
       const kind = binKind(a.f);
-      const col = new THREE.Color(a.f.color || "#9aa5c0");
-      // very dark bins would not show a glow: lift them
+      const col = new THREE.Color(a.f.color || "#9aa5c0"); // the bin keeps its own colour while it glows
+      // only the halo of a very dark bin is lifted (a black halo would not show at all)
+      const halo = col.clone();
       const hsl = {};
-      col.getHSL(hsl);
-      if (hsl.l < 0.3) col.setHSL(hsl.h, Math.min(hsl.s, 0.2), 0.62);
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: col, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
+      halo.getHSL(hsl);
+      if (hsl.l < 0.3) halo.setHSL(hsl.h, Math.min(hsl.s, 0.2), 0.55);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: halo, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
       glow.position.set(a.x, a.top - a.h * 0.45, a.z);
       glow.scale.setScalar(2.2);
       glow.renderOrder = 7;
@@ -66,7 +67,7 @@ export class WasteFeature extends Feature {
       b.lit = !!b.kind && this.kinds.has(b.kind);
       b.glow.visible = b.lit;
       b.base.forEach((x) => {
-        if (b.lit) { x.m.emissive.copy(b.col); x.m.emissiveIntensity = 1; } else { x.m.emissive.copy(x.e); x.m.emissiveIntensity = x.i; }
+        if (b.lit) { x.m.emissive.copy(b.col); x.m.emissiveIntensity = 0.5; } else { x.m.emissive.copy(x.e); x.m.emissiveIntensity = x.i; }
       });
       if (b.lit) names.push(KINDS[b.kind].label);
     });
@@ -80,7 +81,7 @@ export class WasteFeature extends Feature {
       const k = 0.75 + 0.25 * Math.sin(t * 3);
       b.glow.material.opacity = k;
       b.glow.scale.setScalar(2.0 + 0.4 * Math.sin(t * 3));
-      b.base.forEach((x) => (x.m.emissiveIntensity = 0.7 + 0.5 * k));
+      b.base.forEach((x) => (x.m.emissiveIntensity = 0.35 + 0.35 * k)); // gentle: the colour of the bin must stay recognisable
     });
   }
 
