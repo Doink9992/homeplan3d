@@ -611,6 +611,24 @@ export function buildSite(plan, ctx, opts = {}) {
       group.add(sm);
     });
 
+    // archways / doors drawn as a frame on a wall of the building: { type: "arch" | "door", x, z, rot (deg, direction of the wall), w, h, elev }
+    (b.openings || []).forEach((op) => {
+      const w = op.w || 1.1, hh = op.h || 2.2, r = op.type === "door" ? 0 : w / 2;
+      const sh = new THREE.Shape();
+      sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(w / 2, hh - r);
+      if (r) sh.absarc(0, hh - r, r, 0, Math.PI, false); else { sh.lineTo(w / 2, hh); sh.lineTo(-w / 2, hh); }
+      sh.lineTo(-w / 2, 0);
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.16, bevelEnabled: false, curveSegments: 16 });
+      geo.translate(0, 0, -0.08);
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xff2bd6, emissive: 0xff2bd6, emissiveIntensity: 0.5, transparent: true, opacity: 0.5, depthWrite: false }));
+      m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), new THREE.LineBasicMaterial({ color: 0xff2bd6 })));
+      m.position.set(op.x, op.elev || 0, op.z);
+      m.rotation.y = -rad(op.rot || 0);
+      m.userData = { site: b.id };
+      group.add(m);
+      ctx.pickables.push(m);
+    });
+
     // balconies: platform on the level of a storey (default: the first one above ground) with a railing on every edge
     // except the first one, which is the one on the building wall
     (b.balconies || []).forEach((bc) => {

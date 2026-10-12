@@ -1303,6 +1303,11 @@ class HomePlan3DView extends HTMLElement {
         x.fillStyle = "#ffb347"; x.font = `${12 * dpr}px sans-serif`; x.textAlign = "center";
         x.fillText(`${b.name} (${polyArea(b.points).toFixed(0)} m²${b.levels > 1 ? `, ${b.levels} Geschosse` : ""})`, lp[0], lp[1]);
         if (sel) b.points.forEach((p) => { const q = this.w2s(p); x.fillStyle = "#fff"; x.fillRect(q[0] - 4 * dpr, q[1] - 4 * dpr, 8 * dpr, 8 * dpr); });
+        (b.openings || []).forEach((op) => {
+          const a = rad(op.rot || 0), hw = (op.w || 1.1) / 2;
+          const p1 = this.w2s([op.x - Math.cos(a) * hw, op.z - Math.sin(a) * hw]), p2 = this.w2s([op.x + Math.cos(a) * hw, op.z + Math.sin(a) * hw]);
+          x.save(); x.setLineDash([]); x.strokeStyle = "#ff2bd6"; x.lineWidth = 4 * dpr; x.beginPath(); x.moveTo(...p1); x.lineTo(...p2); x.stroke(); x.restore();
+        });
         (b.balconies || []).forEach((bc) => {
           if (!bc.points?.length) return;
           this.path(x, bc.points, true);
