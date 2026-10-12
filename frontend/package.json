@@ -4,8 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/main.js --bundle --minify --format=esm --outfile=../custom_components/homeplan3d/www/homeplan3d.js",
-    "watch": "esbuild src/main.js --bundle --format=esm --sourcemap=inline --watch --outfile=../custom_components/homeplan3d/www/homeplan3d.js"
+    "watch": "esbuild src/main.js --bundle --format=esm --sourcemap=inline --watch --outfile=../custom_components/homeplan3d/www/homeplan3d.js",
+    "test": "node --test \"test/*.test.mjs\""
   },
-  "dependencies": { "three": "^0.170.0" },
-  "devDependencies": { "esbuild": "^0.24.0" }
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
 }

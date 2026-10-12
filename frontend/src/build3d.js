@@ -15,8 +15,13 @@ const COL = {
   table: "#e0b080", bench: "#e0b080", sofa_l: "#7bd88f", sofa: "#7bd88f", tv_board: "#7bd88f", rug: "#8f6bb3", shower: "#7fdbff", wc: "#e8f1ff",
   washbasin: "#e8f1ff", bathtub: "#e8f1ff", robot_vacuum: "#00ff9d", led_strip: "#fff29a", inverter: "#ffd166", meter: "#ffd166",
   grid_point: "#ffd166", stairs: "#c9d1e6", stairs_u: "#c9d1e6",
+  tv: "#5a6bff", monitor: "#5a6bff", speaker: "#ff2bd6", soundbar: "#ff2bd6", car: "#9aa5c0", battery: "#7bd88f", wallbox: "#19e6ff",
 };
-const DIM = { stairs: [1, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02] };
+const DIM = {
+  stairs: [1, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02],
+  tv: [1.2, 0.06, 0.7], monitor: [0.6, 0.05, 0.36], speaker: [0.22, 0.22, 0.32], soundbar: [0.9, 0.09, 0.07], car: [1.9, 4.6, 1.5], battery: [0.6, 0.25, 1.1], wallbox: [0.25, 0.12, 0.35],
+};
+const MOUNT = { kitchen_wall: 1.4, tv: 0.8, monitor: 0.74, soundbar: 0.45 };
 
 export function valueSprite(w = 256) {
   const c = document.createElement("canvas");
@@ -57,7 +62,7 @@ function buildFurniture(f, elev, ctx) {
   const dark = ctx.theme === "day" ? 1 : 0.5;
   const mat = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(dark), emissive: col, emissiveIntensity: ctx.theme === "day" ? 0 : 0.18, transparent: true, opacity: ctx.theme === "day" ? 1 : 0.88 });
   const lineMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
-  const y0 = f.mountY ?? (f.type === "kitchen_wall" ? 1.4 : 0);
+  const y0 = f.mountY ?? MOUNT[f.type] ?? 0;
   const geos = [];
   const mats = [mat];
   const g = new THREE.Group();
@@ -110,12 +115,42 @@ function buildFurniture(f, elev, ctx) {
       add(geo);
       break;
     }
+    case "tv":
+    case "monitor": {
+      add(box(w, h, d, y0)); // frame
+      // screen: canvas texture that the screens feature draws into
+      const cw = 512, ch = Math.max(64, Math.round((512 * h) / w));
+      const canvas = document.createElement("canvas");
+      canvas.width = cw; canvas.height = ch;
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const sw = Math.max(0.1, w - 0.06), sh = Math.max(0.1, h - 0.06);
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      screen.position.set(0, y0 + h / 2, d / 2 + 0.003);
+      screen.userData.entity = f.entity || null;
+      g.add(screen);
+      ctx.pickables.push(screen);
+      ctx.anchors.screens.push({ f, canvas, tex, mesh: screen, w: sw, h: sh, floor: ctx.cur.i });
+      break;
+    }
+    case "car": {
+      // simple body + cabin; the glow band around the base shows charge level / climate
+      add(box(w, h * 0.42, d, 0.18));
+      add(box(w * 0.86, h * 0.34, d * 0.5, 0.18 + h * 0.42, 0, -d * 0.04));
+      const bandMat = new THREE.MeshBasicMaterial({ color: 0x19e6ff, transparent: true, opacity: 0.9 });
+      const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, 0.06, d + 0.08), bandMat);
+      band.position.set(0, 0.1, 0);
+      g.add(band);
+      ctx.anchors.cars.push({ f, band: bandMat, group: g, floor: ctx.cur.i, w, d, h });
+      break;
+    }
     default:
       add(box(w, h, d, y0));
   }
 
   const entry = { mats, group: g };
   const top = y0 + h;
+  ctx.anchors.furniture.push({ f, floor: ctx.cur.i, x: f.x, z: f.z, y: ctx.cur.elev + y0, top: ctx.cur.elev + top, w, d, h, group: g, mats });
   if (f.entity || f.stateEntity) {
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     glow.scale.setScalar(Math.max(1, w * 2));
@@ -320,6 +355,7 @@ export function buildRoof(plan, ctx) {
         m.material = mat;
         m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), line));
         group.add(m);
+        ctx.anchors.pv.push({ mesh: m, mat, entity: p.entity || null, wp: p.wp || 400 });
       }
     if (p.entity) ctx.dyn.push({ kind: "solar", entity: p.entity, mat, wp: p.wp || 400 });
   });
@@ -426,13 +462,15 @@ export function buildBuilding(plan, opts) {
     wall: new THREE.MeshStandardMaterial({ color: th.wall, emissive: th.wall, emissiveIntensity: theme === "day" ? 0 : 0.25, transparent: true, opacity: th.wallOp, depthWrite: false }),
     edge: new THREE.LineBasicMaterial({ color: theme === "day" ? 0x667085 : th.wall, transparent: true, opacity: th.edgeOp }),
   };
-  const ctx = { theme, th, mats, dyn: [], pickables: [], glowTex: opts.glowTex };
+  const anchors = { rooms: [], furniture: [], devices: [], pv: [], screens: [], cars: [] };
+  const ctx = { theme, th, mats, dyn: [], pickables: [], glowTex: opts.glowTex, anchors, cur: { elev: 0, i: 0 } };
   const root = new THREE.Group();
   const st = { ...DEFAULTS, ...(plan.settings || {}) };
 
   plan.floors.forEach((fl, i) => {
     if (i > opts.maxFloor) return;
     const elev = elevation(plan, i);
+    ctx.cur = { elev, i };
     const g = new THREE.Group();
     const dim = i < opts.maxFloor && opts.maxFloor !== Infinity ? 0.7 : 1;
 
@@ -451,6 +489,8 @@ export function buildBuilding(plan, opts) {
       mesh.userData = { room: r.id, floor: fl.id };
       g.add(mesh);
       ctx.pickables.push(mesh);
+      const lp0 = labelPoint(r.points);
+      anchors.rooms.push({ id: r.id, name: r.name, area: r.area, room: r, floor: i, x: lp0[0], z: lp0[1], y: elev + fl.height * 0.5, elev });
       if (r.name) {
         const lp = labelPoint(r.points);
         const sp = opts.label(r.name, theme);
@@ -506,6 +546,7 @@ export function buildBuilding(plan, opts) {
       glow.visible = false;
       g.add(mesh, glow);
       ctx.pickables.push(mesh);
+      anchors.devices.push({ d, entity: d.entity, floor: i, x: d.x, y: elev + y, z: d.z, kind: dom, mesh });
       ctx.dyn.push({ kind: dom, entity: d.entity, mesh, glow, baseScale: bs, pulse: dom === "light" });
       if (d.name && d.showName) {
         const sp = valueSprite();
@@ -529,5 +570,5 @@ export function buildBuilding(plan, opts) {
     const [x0, , , z1] = bbox(all);
     root.add(buildCompass(plan.site.north, [x0 - 2.5, z1 + 2.5], ctx));
   }
-  return { root, dyn: ctx.dyn, pickables: ctx.pickables };
+  return { root, dyn: ctx.dyn, pickables: ctx.pickables, anchors };
 }

@@ -1,5 +1,5 @@
 <!doctype html><meta charset="utf-8"><title>Home Plan 3D – Vorschau</title>
-<body style="margin:0;height:100vh;background:#000">
+<body style="margin:0;height:100vh;background:#000;overflow:hidden">
 <script type="module" src="../custom_components/homeplan3d/www/homeplan3d.js"></script>
 <script type="module">
 // Demo harness without Home Assistant
@@ -18,6 +18,12 @@ const states = {
   "switch.steckdose_tv": { state: "on", attributes: { friendly_name: "Steckdose TV" } },
   "switch.kaffeemaschine": { state: "off", attributes: { friendly_name: "Kaffeemaschine" } },
   "binary_sensor.haustuer": { state: q.get("door") === "open" ? "on" : "off", attributes: {} },
+  "weather.home": { state: q.get("weather") || "partlycloudy", attributes: { friendly_name: "Wetter", temperature: 12, wind_speed: Number(q.get("wind") || 22), wind_speed_unit: "km/h", wind_bearing: 270 } },
+  "sun.sun": { state: q.get("night") ? "below_horizon" : "above_horizon", attributes: { elevation: q.get("night") ? -22 : 38, azimuth: 205 } },
+  "media_player.tv": { state: "playing", attributes: { friendly_name: "TV", app_name: "Netflix", media_title: "Dark", entity_picture: "/preview/cover.svg", volume_level: 0.4, source: "HDMI 1", source_list: ["HDMI 1", "HDMI 2"] } },
+  "media_player.wohnen_speaker": { state: "playing", attributes: { friendly_name: "Wohnen", media_title: "Neon Nights", media_artist: "Demo Band", entity_picture: "/preview/cover.svg", volume_level: 0.6, group_members: ["media_player.wohnen_speaker", "media_player.kueche"] } },
+  "media_player.kueche": { state: "playing", attributes: { friendly_name: "Küche", media_title: "Neon Nights", media_artist: "Demo Band", entity_picture: "/preview/cover.svg", volume_level: 0.3, group_members: ["media_player.wohnen_speaker", "media_player.kueche"] } },
+  "camera.hof": { state: "recording", attributes: { friendly_name: "Hof", entity_picture: "/preview/cam.svg" } },
   "sensor.pv_power": { state: "310", attributes: { unit_of_measurement: "W" } },
   "sensor.house_power": { state: "1240", attributes: { unit_of_measurement: "W" } },
   "sensor.wohnen_temperatur": { state: "21.4", attributes: dc("temperature", "°C") },
@@ -40,6 +46,12 @@ const hass = {
     if (m.type === "homeplan3d/get") return plan;
     if (m.type === "homeplan3d/save") { plan = m.plan; return { ok: true }; }
     if (m.type === "neonplan3d/building/get" && neon) return neon;
+    if (m.type === "media_player/browse_media") {
+      const folder = (t, id) => ({ title: t, media_content_id: id, media_content_type: "library", can_expand: true, can_play: false });
+      if (!m.media_content_id) return { title: "Medien", media_content_id: "root", media_content_type: "library", children: [folder("Radiosender", "radio"), folder("Playlists", "lists")] };
+      return { title: m.media_content_id === "radio" ? "Radiosender" : "Playlists", media_content_id: m.media_content_id, media_content_type: "library",
+        children: [1, 2, 3].map((i) => ({ title: `Eintrag ${i}`, media_content_id: `item${i}`, media_content_type: "music", can_play: true, can_expand: false })) };
+    }
     throw new Error("unknown " + m.type);
   },
   callService: (d, s, x) => { const e = states[x.entity_id]; if (e) e.state = e.state === "on" ? "off" : "on"; el.hass = { ...hass }; },

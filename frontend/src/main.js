@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { createFeatures } from "./features/index.js";
+import { openScreenEditor } from "./features/screens-ui.js";
 import { uid, snap, domainOf, clone, inPoly, bbox, distSeg, polyArea, labelPoint, furnitureCorners, rad } from "./util.js";
 import { newFloor, emptyPlan, normalizePlan, elevation, wallNetwork, roofSections, newSiteBuilding, applyLevels } from "./plan.js";
 import { buildBuilding, setSprite, THEMES } from "./build3d.js";
@@ -15,6 +18,7 @@ const FD = {
   stove: [0.6, 0.6, 0.9], sink: [0.8, 0.6, 0.9], dishwasher: [0.6, 0.6, 0.85], washer: [0.6, 0.6, 0.85], shower: [0.9, 0.9, 2.1],
   bathtub: [1.7, 0.75, 0.55], wc: [0.4, 0.7, 0.8], washbasin: [0.6, 0.45, 0.85], stairs: [0.9, 2.4, 2.8], rug: [2, 3, 0.02], stool: [0.35, 0.35, 0.45],
   bench: [1.2, 0.4, 0.45], robot_vacuum: [0.36, 0.36, 0.1], led_strip: [1, 0.05, 0.05], inverter: [0.5, 0.2, 0.65], meter: [0.5, 0.2, 1.1],
+  tv: [1.2, 0.06, 0.7], monitor: [0.6, 0.05, 0.36], speaker: [0.22, 0.22, 0.32], soundbar: [0.9, 0.09, 0.07], car: [1.9, 4.6, 1.5], battery: [0.6, 0.25, 1.1], wallbox: [0.25, 0.12, 0.35],
 };
 const FURN_TYPES = Object.keys(FD);
 
@@ -53,6 +57,24 @@ button.on{background:#0b3c4a;border-color:var(--neon);box-shadow:0 0 8px var(--n
 .hint{position:absolute;left:8px;bottom:8px;font-size:12px;opacity:.6;pointer-events:none}
 .msg{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#0b3c4a;border:1px solid var(--neon);padding:6px 12px;border-radius:8px;font-size:13px;z-index:5}
 .sp{flex:1}
+#chips{position:absolute;top:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;pointer-events:none;z-index:3}
+#chips span{background:rgba(7,8,15,.75);border:1px solid #2a3b6a;border-radius:14px;padding:3px 10px;font-size:12px}
+#labels{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.card3d{background:rgba(10,16,34,.72);border:1px solid rgba(25,230,255,.55);border-radius:10px;padding:6px 10px;font-size:12px;color:#dfe8ff;backdrop-filter:blur(4px);box-shadow:0 0 14px rgba(25,230,255,.25);white-space:nowrap;transform:translateY(-6px)}
+.card3d b{color:#19e6ff}
+.card3d .sub{opacity:.7;font-size:11px}
+.card3d button{padding:2px 8px;font-size:12px}
+.np{display:flex;gap:8px;align-items:center;min-width:220px}
+.np img{width:46px;height:46px;border-radius:6px;object-fit:cover;background:#111}
+.np .t{max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.np .ctl{display:flex;gap:4px;align-items:center;margin-top:3px}
+.np input[type=range]{width:90px;padding:0}
+.overlay h4{color:var(--neon);text-transform:none;letter-spacing:0}
+.overlay label{display:block;margin:6px 0 2px;opacity:.7;font-size:12px}
+.overlay input,.overlay select{width:100%;box-sizing:border-box}
+.overlay .row{display:flex;gap:8px}.overlay .row>*{flex:1}
+.overlay .dev{border-radius:6px}.overlay .dev:hover{background:#141a33}
+.overlay{position:absolute;z-index:6;background:rgba(9,13,28,.94);border:1px solid #2a3b6a;border-radius:12px;padding:12px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
 @media(max-width:700px){.main{flex-direction:column}.side{width:auto;max-height:38%;border-left:0;border-top:1px solid #1d2a4a}}
 `;
 
@@ -85,6 +107,9 @@ class HomePlan3DView extends HTMLElement {
     this.theme = "neon";
     this.undoStack = [];
     this._labels = new Map();
+    this.chips = {};
+    this.holo = true;
+    this.features = createFeatures(this);
   }
 
   set hass(h) {
@@ -95,6 +120,30 @@ class HomePlan3DView extends HTMLElement {
     if (!this.editing && this.panelRoom) this.renderRoomPanel();
   }
   get hass() { return this._hass; }
+  getStates() { return this._replayStates || this._hass?.states; }
+  fxOn(id) {
+    if (this.cfg[id] != null) return !!this.cfg[id];
+    try { const v = localStorage.getItem("hp3d.fx." + id); if (v != null) return v === "1"; } catch { /* storage unavailable */ }
+    return true;
+  }
+  setFx(id, on) {
+    try { localStorage.setItem("hp3d.fx." + id, on ? "1" : "0"); } catch { /* storage unavailable */ }
+    const f = this.features.find((x) => x.id === id);
+    if (!f) return;
+    f.on = on;
+    f.group.visible = on;
+    if (!on) f.reset();
+    else f.update(this.getStates() || {});
+    this.renderBar();
+  }
+  closeOverlay() {
+    if (this._overlay) { this._overlay.remove(); this._overlay = null; }
+  }
+  setChip(id, html) {
+    if (html) this.chips[id] = html; else delete this.chips[id];
+    const el = this.$("#chips");
+    if (el) el.innerHTML = Object.values(this.chips).map((h) => `<span>${h}</span>`).join("");
+  }
   set config(c) {
     this.cfg = c || {};
     this.theme = this.cfg.theme === "day" ? "day" : "neon";
@@ -121,7 +170,7 @@ class HomePlan3DView extends HTMLElement {
       </div>
       <div class="main">
         <canvas id="ed" class="hidden"></canvas>
-        <div id="view"><div class="hint" id="hint"></div></div>
+        <div id="view"><div id="labels"></div><div id="chips"></div><div class="hint" id="hint"></div></div>
         <div class="side hidden" id="side"></div>
       </div>
     </div>`;
@@ -230,6 +279,8 @@ class HomePlan3DView extends HTMLElement {
     t.innerHTML = "";
     if (roofSections(this.plan).length) t.append(mk("Dach", this.showRoof ? "on" : "", () => { this.showRoof = !this.showRoof; this.renderBar(); this.rebuild3D(); }));
     if (this.plan.site?.buildings?.length) t.append(mk("Gelände", this.showSite ? "on" : "", () => { this.showSite = !this.showSite; this.renderBar(); this.rebuild3D(); this.draw2D(); }, "Weitere Gebäude auf dem Flurstück"));
+    this.features.forEach((f) => { if (f.available()) t.append(mk(f.label, f.on ? "on" : "", () => this.setFx(f.id, !f.on), f.title)); });
+    if (this.features.some((f) => f.usesHolo && f.available())) t.append(mk("◈ Karten", this.holo ? "on" : "", () => { this.holo = !this.holo; this.renderBar(); this.updateStates(); }, "Karten und Hologramme im Raum ein- oder ausblenden"));
     if (this.hasClimate) {
       t.append(mk("🌡 Klima", this.showClimate ? "on" : "", () => { this.showClimate = !this.showClimate; this.renderBar(); this.updateStates(); }, "Temperatur und Luftfeuchte in den Räumen"));
       t.append(mk("🔥 Wärme", this.heatmap ? "on" : "", () => { this.heatmap = !this.heatmap; this.renderBar(); this.updateStates(); }, "Räume nach Temperatur einfärben"));
@@ -379,7 +430,7 @@ class HomePlan3DView extends HTMLElement {
         { k: "type", l: "Typ", t: "select", o: FURN_TYPES }, { k: "name", l: "Name" }, { k: "rot", l: "Drehung (°)", t: "number", s: 5 },
         { k: "w", l: "Breite", t: "number" }, { k: "d", l: "Tiefe", t: "number" }, { k: "h", l: "Höhe", t: "number" }, { k: "mountY", l: "Höhe über Boden", t: "number", p: "0" },
         { k: "entity", l: "Entität (Zustand/Leuchten)", list: "ents" }, { k: "power", l: "Leistungs-Sensor", list: "ents" },
-      ])}`;
+      ])}${obj.type === "tv" || obj.type === "monitor" ? `<button class="full" id="scr-edit">🖥 Bildschirm-Regeln …</button>` : ""}`;
     } else if (s?.kind === "site") {
       obj = find(this.plan.site?.buildings || [], s.id);
       if (obj) selHtml += `<h4>Gebäude</h4>${this.formHtml(obj, [
@@ -416,6 +467,7 @@ class HomePlan3DView extends HTMLElement {
     side.querySelector("#grid").onchange = (e) => { this.grid = +e.target.value; };
     side.querySelector("#pent")?.addEventListener("change", (e) => (this.pendingEntity = e.target.value));
     side.querySelector("#ftype")?.addEventListener("change", (e) => (this.furnType = e.target.value));
+    side.querySelector("#scr-edit")?.addEventListener("click", () => openScreenEditor(this, obj));
     this.fillDevList();
     side.querySelector("#devfilter").oninput = (e) => { this._devFilter = e.target.value; this.fillDevList(); };
     side.querySelector("#dev-selall").onclick = () => {
@@ -613,10 +665,12 @@ class HomePlan3DView extends HTMLElement {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI / 2.02;
-    this.scene.add(new THREE.AmbientLight(0x8090c0, 0.9));
-    const dl = new THREE.DirectionalLight(0xffffff, 0.7);
-    dl.position.set(5, 18, 8);
-    this.scene.add(dl);
+    this.ambient = new THREE.AmbientLight(0x8090c0, 0.9);
+    this.scene.add(this.ambient);
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    this.sunLight.position.set(5, 18, 8);
+    this.scene.add(this.sunLight);
+    this.labelRenderer = new CSS2DRenderer({ element: this.$("#labels") });
     this.world = new THREE.Group();
     this.scene.add(this.world);
     this.ray = new THREE.Raycaster();
@@ -631,12 +685,16 @@ class HomePlan3DView extends HTMLElement {
       down = null;
       if (!moved) this.pick3D(e, long);
     });
+    let last = performance.now() / 1000;
     const loop = () => {
       this._raf = requestAnimationFrame(loop);
       this.controls.update();
-      const t = performance.now() / 1000;
+      const t = performance.now() / 1000, dt = Math.min(0.1, t - last);
+      last = t;
       this.dyn.forEach((d) => { if (d.pulse && d.on) d.glow.scale.setScalar(d.baseScale * (1 + 0.05 * Math.sin(t * 3))); });
+      this.features.forEach((f) => { if (f.on) f.tick(dt, t); });
       this.renderer.render(this.scene, this.camera);
+      this.labelRenderer.render(this.scene, this.camera);
     };
     loop();
   }
@@ -644,6 +702,7 @@ class HomePlan3DView extends HTMLElement {
     const w = this.viewEl.clientWidth, h = this.viewEl.clientHeight;
     if (w && h) {
       this.renderer.setSize(w, h, false);
+      this.labelRenderer.setSize(w, h);
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     }
@@ -668,6 +727,8 @@ class HomePlan3DView extends HTMLElement {
 
   rebuild3D() {
     if (!this.world) return;
+    this.features.forEach((f) => f.dispose());
+    this.$("#labels")?.replaceChildren();
     this.world.traverse((o) => { o.geometry?.dispose(); if (o.material && !o.material.map) o.material.dispose?.(); });
     this.world.clear();
     const th = THEMES[this.theme] || THEMES.neon;
@@ -687,8 +748,17 @@ class HomePlan3DView extends HTMLElement {
     this.world.add(res.root);
     this.dyn = res.dyn;
     this.pickables = res.pickables;
+    this.anchors = res.anchors;
+    this.features.forEach((f) => {
+      f.group = new THREE.Group();
+      f.on = this.fxOn(f.id);
+      f.group.visible = f.on;
+      this.world.add(f.group);
+      f.build(res.anchors);
+    });
     const hc = this.dyn.some((d) => d.kind === "roomclimate");
-    if (hc !== this.hasClimate) { this.hasClimate = hc; this.renderBar(); }
+    const sig = this.features.map((f) => (f.available() ? "1" : "0")).join("");
+    if (hc !== this.hasClimate || sig !== this._fxSig) { this.hasClimate = hc; this._fxSig = sig; this.renderBar(); }
     const ext = this.extent();
     if (ext) {
       const grid = new THREE.GridHelper(120, 120, this.theme === "day" ? 0xb8c2d6 : 0x1d3057, this.theme === "day" ? 0xcfd6e6 : 0x101c36);
@@ -729,8 +799,9 @@ class HomePlan3DView extends HTMLElement {
   }
 
   updateStates() {
-    const st = this._hass?.states;
+    const st = this.getStates();
     if (!st) return;
+    this.features.forEach((f) => { if (f.on) f.update(st); });
     for (const d of this.dyn) {
       if (d.kind === "roomclimate") { this.updateClimate(d); continue; }
       const s = st[d.entity];
@@ -775,6 +846,7 @@ class HomePlan3DView extends HTMLElement {
     const hit = this.ray.intersectObjects(this.pickables, false)[0];
     if (!hit) { if (!this.editing && this.panelRoom) { this.panelRoom = null; this.$("#side").classList.add("hidden"); } return; }
     const u = hit.object.userData;
+    if (!this.editing && this.features.some((f) => f.on && (long ? f.onLongPress(u, e) : f.onTap(u, e)))) return;
     if (u.entity) {
       if (long || this.editing) return this.moreInfo(u.entity);
       const dom = domainOf(u.entity);

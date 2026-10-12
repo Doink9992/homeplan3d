@@ -22,6 +22,14 @@ Zeichne deinen Grundriss (oder importiere ihn), sieh dein Haus als **leuchtendes
 
 Danach erscheint **Home Plan 3D** in der Seitenleiste. Mit **✏️ Editor** (nur Admins) zeichnest du; **💾 Speichern** legt den Plan in Home Assistant ab.
 
+## Erweiterungen
+
+Die Erweiterungen sind eingebaut. Ihre Schalter erscheinen in der Leiste, sobald sie zu deinem Plan passen (zum Beispiel eine Wetter-Entität oder ein platzierter Mediaplayer).
+
+- **☁ Wetter** – Regen, Schnee, Gewitter mit Blitz, Nebel (optional), Wolken, Windneigung, Sonne am Tag und Mond in der Nacht, gesteuert von einer `weather.*`-Entität und `sun.sun`. Die Wetter-Entität wird automatisch gewählt oder unter `settings.weather.entity` festgelegt.
+- **Live-Bildschirme** – Fernseher und Monitore (Möbeltypen `tv`, `monitor`) zeigen Cover und Farbe der laufenden App. Eigene Bild-Regeln legen fest, was bei bestimmten Zuständen erscheint: Logo, hochgeladenes Bild oder ein Kamerabild (`camera.xyz`, alle 5 s aktualisiert). Möbel anklicken, dann **🖥 Bildschirm-Regeln …**.
+- **🔊 Sound** – Karten mit Cover, Titel, Transport und Lautstärke über spielenden Mediaplayern, Klangringe nach Lautstärke und Multiroom-Linien über `group_members`. Langes Drücken auf einen Mediaplayer öffnet das Schnellmenü mit Quellen und Medienbrowser.
+
 ## Geräte verschieben und entfernen
 
 Im Editor (↖ Auswahl) funktioniert alles mit der Maus:
