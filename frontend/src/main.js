@@ -1381,6 +1381,15 @@ class HomePlan3DView extends HTMLElement {
           x.setLineDash([8 * dpr, 5 * dpr]);
         }
       });
+      (this.plan.site?.decks || []).forEach((d) => {
+        if (!d.points?.length) return;
+        this.path(x, d.points, true);
+        x.fillStyle = "rgba(255,179,71,.18)"; x.fill();
+        x.setLineDash([]); x.strokeStyle = "#ffb347"; x.lineWidth = dpr; x.stroke();
+        const lp3 = this.w2s(labelPoint(d.points));
+        x.fillStyle = "#ffb347"; x.font = `${10 * dpr}px sans-serif`; x.textAlign = "center";
+        x.fillText(d.name || "Terrasse", lp3[0], lp3[1]);
+      });
       if (this.plan.site?.cadastreHouse) { this.path(x, this.plan.site.cadastreHouse, true); x.strokeStyle = "#3ddc84"; x.lineWidth = 1.5 * dpr; x.stroke(); }
       x.setLineDash([]);
     }

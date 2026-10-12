@@ -46,6 +46,7 @@ site      { north, cadastreHouse, buildings[ { id, name, points, height, levels,
   parts[]      West → Ost: { type garage|bike|carport|open, len?, name?, door?, doorSide?, stalls?, stallWidth?, numberFrom? }
                len leer = teilt sich den Rest; doorSide low|high|west|east (Standard low); numberFrom east|west (Standard east)
   openings[]   { type arch|door, x, z, rot (° Wandrichtung), w, h, elev? } Rahmen/Torbogen an einer Gebäudewand
+  site.decks[] { name?, points[[x,z]] (Kante 0 liegt an der Hauswand), elev? (Standard 0 = Erdgeschoss), rail?, railSkip? [Kanten ohne Geländer] } Terrassen des Hauses
   balconies[]  { name?, points[[x,z]] (Kante 0 liegt an der Wand), elev? (Standard: erstes Geschoss), rail? }
   pv{}         { enabled, fill, rows, cols, orientation, over ("#<Index eines Teils>"), edge, wp, entity }
 ```
