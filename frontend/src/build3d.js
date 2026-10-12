@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, isStairs, DEFAULTS } from "./plan.js";
 import { labelPoint, rad, domainOf, inPoly, bbox } from "./util.js";
-import { siteFrame, localToPlan, resolveParts, pvGrid, PART_LABELS } from "./lib/site.js";
+import { siteFrame, localToPlan, resolveParts, pvGrid, doorSpec, stallCenters, PART_LABELS } from "./lib/site.js";
 
 export const THEMES = {
   neon: { bg: 0x07080f, wall: 0x19e6ff, wallOp: 0.2, edgeOp: 0.85, floorK: 0.25, floorEm: 0.14, door: 0xff2bd6, win: 0x6fa8ff, roof: 0xff9a3c, text: "#dfe8ff", glow: "#19e6ff" },
@@ -426,11 +426,10 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
       fg.add(mesh);
       ctx.pickables.push(mesh);
       if ((pt.type === "garage" || pt.type === "bike") && hasParts) {
-        // door in the middle of the room, on the low side
-        const bikeRoom = pt.type === "bike";
-        const dw = Math.min(Number(pt.door) || (bikeRoom ? 1.2 : 2.5), len - 0.2), dh = Math.min(bikeRoom ? 2.0 : 2.2, hLow - 0.2);
-        const door = new THREE.Mesh(new THREE.BoxGeometry(dw, dh, 0.05), new THREE.MeshStandardMaterial({ color: 0xff2bd6, emissive: 0xff2bd6, emissiveIntensity: 0.5, transparent: true, opacity: 0.5, depthWrite: false }));
-        door.position.set(uc, dh / 2, W / 2 + 0.03);
+        // door in the middle of the room on a long side, or on the end wall (doorSide west / east)
+        const d = doorSpec({ side: pt.doorSide, pt, f, W, hLow, bike: pt.type === "bike", width: pt.door });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(d.sx, d.sy, d.sz), new THREE.MeshStandardMaterial({ color: 0xff2bd6, emissive: 0xff2bd6, emissiveIntensity: 0.5, transparent: true, opacity: 0.5, depthWrite: false }));
+        door.position.set(d.x, d.y, d.z);
         door.add(new THREE.LineSegments(new THREE.EdgesGeometry(door.geometry), new THREE.LineBasicMaterial({ color: 0xff2bd6 })));
         fg.add(door);
       }
@@ -464,8 +463,8 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
       floor.rotation.x = -Math.PI / 2;
       floor.position.set(uc, 0.02, 0);
       fg.add(floor);
-      // stalls are numbered from the west end (next to the garage)
-      if (pt.type === "carport") for (let k = 0; k < n; k++) labelAt(String(k + 1), f.tToU(pt.t0 + ((k + 0.5) * (pt.t1 - pt.t0)) / n), 0, 0.05);
+      // stalls are numbered from the east end unless the part says otherwise (numberFrom: "west")
+      if (pt.type === "carport") stallCenters(pt, pt.numberFrom).forEach((s) => labelAt(String(s.n), f.tToU(s.t), 0, 0.05));
     }
   });
   if (hasParts && parts.some((p) => p.type === "carport")) {

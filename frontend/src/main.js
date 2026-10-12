@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createFeatures } from "./features/index.js";
 import { openScreenEditor } from "./features/screens-ui.js";
-import { siteFrame, localToPlan, resolveParts, partsFromLayout, PART_LABELS } from "./lib/site.js";
+import { siteFrame, localToPlan, resolveParts, partsFromLayout, doorSpec, stallCenters, PART_LABELS, DOOR_SIDES } from "./lib/site.js";
 import { CarFeature } from "./features/car.js";
 import { uid, snap, domainOf, clone, inPoly, bbox, distSeg, polyArea, labelPoint, furnitureCorners, rad } from "./util.js";
 import { newFloor, emptyPlan, normalizePlan, elevation, wallNetwork, roofSections, newSiteBuilding, applyLevels } from "./plan.js";
@@ -77,7 +77,7 @@ button.on{background:#0b3c4a;border-color:var(--neon);box-shadow:0 0 8px var(--n
 .carcard .bar{height:7px;border-radius:4px;background:#1b2440;margin:6px 0;overflow:hidden}.carcard .bar i{display:block;height:100%}
 .carcard .btns{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
 .prow{border:1px solid #1d2a4a;border-radius:8px;padding:4px;margin:4px 0}
-.prow .l1,.prow .l2{display:flex;gap:3px;margin:2px 0}.prow .l1 select{flex:1}.prow .l2 input{min-width:0}
+.prow .l1,.prow .l2,.prow .l3{display:flex;gap:3px;margin:2px 0}.prow .l1 select,.prow .l3 select{flex:1}.prow .l2 input{min-width:0}
 .prow button{padding:2px 6px}
 .np{display:flex;gap:8px;align-items:center;min-width:220px}
 .np img{width:46px;height:46px;border-radius:6px;object-fit:cover;background:#111}
@@ -552,7 +552,12 @@ class HomePlan3DView extends HTMLElement {
       <div class="l2">${p.type === "carport"
         ? `<input data-f="stalls" type="number" step="1" value="${p.stalls ?? 4}" title="Stellplätze"><input data-f="stallWidth" type="number" step="0.1" value="${p.stallWidth ?? 2.9}" title="Breite je Stellplatz (m)">`
         : `<input data-f="len" type="number" step="0.1" value="${p.len ?? ""}" placeholder="Länge: Rest" title="Länge (m), leer = Rest">`}
-        ${p.type === "garage" || p.type === "bike" ? `<input data-f="door" type="number" step="0.1" value="${p.door ?? ""}" placeholder="Tür (m)" title="Türbreite (m)">` : ""}</div></div>`).join("");
+        ${p.type === "garage" || p.type === "bike" ? `<input data-f="door" type="number" step="0.1" value="${p.door ?? ""}" placeholder="Tür (m)" title="Türbreite (m)">` : ""}</div>
+      ${p.type === "garage" || p.type === "bike"
+        ? `<div class="l3"><select data-f="doorSide" title="An welcher Wand das Tor sitzt">${Object.entries(DOOR_SIDES).map(([k, l]) => `<option value="${k}" ${(p.doorSide || "low") === k ? "selected" : ""}>Tor: ${l}</option>`).join("")}</select></div>`
+        : p.type === "carport"
+          ? `<div class="l3"><select data-f="numberFrom" title="Von welchem Ende die Stellplätze gezählt werden"><option value="east" ${p.numberFrom !== "west" ? "selected" : ""}>Nummer 1 im Osten</option><option value="west" ${p.numberFrom === "west" ? "selected" : ""}>Nummer 1 im Westen</option></select></div>`
+          : ""}</div>`).join("");
     return `<h4>Aufteilung (West → Ost)</h4>${rows}<button class="full" id="part-add">+ Teil hinzufügen</button>
       <div style="opacity:.6;font-size:11px;margin-top:4px">Länge leer = Rest · Gesamtlänge ${this.siteLength(b).toFixed(1)} m · Carport: Stellplätze × Breite</div>`;
   }
@@ -564,6 +569,7 @@ class HomePlan3DView extends HTMLElement {
           this.pushUndo();
           const p = b.parts[i], f = inp.dataset.f;
           if (f === "type") { p.type = inp.value; if (p.type === "carport") { p.stalls ??= 4; p.stallWidth ??= 2.9; } }
+          else if (f === "doorSide" || f === "numberFrom") { if (inp.value === (f === "doorSide" ? "low" : "east")) delete p[f]; else p[f] = inp.value; } // defaults are not stored
           else p[f] = inp.value === "" ? null : +inp.value;
           this.changed({ side: f === "type" });
         };
@@ -1287,6 +1293,21 @@ class HomePlan3DView extends HTMLElement {
               const t = pt.t0 + (k * (pt.t1 - pt.t0)) / n;
               const a = w2s(localToPlan(fr, fr.tToU(t), -fr.W / 2)), c2 = w2s(localToPlan(fr, fr.tToU(t), fr.W / 2));
               x.beginPath(); x.moveTo(...a); x.lineTo(...c2); x.stroke();
+            }
+            if (pt.type === "garage" || pt.type === "bike") {
+              // door: magenta bar on the wall it sits in
+              const d = doorSpec({ side: pt.doorSide, pt, f: fr, W: fr.W, hLow: b.height || 2.8, bike: pt.type === "bike", width: pt.door });
+              const along = d.sx > d.sz ? [d.sx / 2, 0] : [0, d.sz / 2];
+              const p1 = w2s(localToPlan(fr, d.x - along[0], d.z - along[1])), p2 = w2s(localToPlan(fr, d.x + along[0], d.z + along[1]));
+              x.strokeStyle = "#ff2bd6"; x.lineWidth = 3 * dpr; x.beginPath(); x.moveTo(...p1); x.lineTo(...p2); x.stroke();
+              x.strokeStyle = "#ffb347"; x.lineWidth = dpr;
+            }
+            if (sel) {
+              // names of the parts and the stall numbers, for checking the order
+              x.fillStyle = "#ffb347"; x.font = `${10 * dpr}px sans-serif`; x.textAlign = "center";
+              const text = (s, t, w) => { const q = w2s(localToPlan(fr, fr.tToU(t), w)); x.fillText(s, q[0], q[1]); };
+              if (carport) stallCenters(pt, pt.numberFrom).forEach((s) => text(String(s.n), s.t, fr.W * 0.3));
+              else text(pt.name || PART_LABELS[pt.type] || "", (pt.t0 + pt.t1) / 2, fr.W * 0.3);
             }
           });
           // high side marker: small triangles along the edge

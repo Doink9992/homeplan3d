@@ -91,7 +91,40 @@ test("pv block above the low eave and over a given position", () => {
   assert.ok(Math.abs(hi.modules[0].s + hi.modules[0].mh / 2 - (hi.slope - 0.25)) < 1e-9);
 });
 
-import { partsFromList, resolveParts, partsFromLayout } from "../src/lib/site.js";
+import { partsFromList, resolveParts, partsFromLayout, doorSpec, stallCenters } from "../src/lib/site.js";
+
+test("doors on the end walls sit outside the west / east end, whichever way the frame is turned", () => {
+  const pts = [[0, 10], [25, 10], [25, 12.7], [0, 12.7]];
+  for (const high of ["south", "north"]) {
+    const f = siteFrame(pts, { high }, 0);
+    const west = doorSpec({ side: "west", pt: { t0: 0, t1: 5.3 }, f, W: f.W, hLow: 2.8 });
+    const pw = localToPlan(f, west.x, west.z);
+    assert.ok(Math.abs(pw[0] + 0.03) < 1e-9 && Math.abs(pw[1] - 11.35) < 1e-9, `${high}: west door at ${pw}`);
+    assert.ok(west.sx < west.sz && Math.abs(west.sz - (f.W - 0.3)) < 1e-9); // wider than the room: limited to the building width
+    const east = doorSpec({ side: "east", pt: { t0: 19.7, t1: 25 }, f, W: f.W, hLow: 2.8, width: 2 });
+    const pe = localToPlan(f, east.x, east.z);
+    assert.ok(Math.abs(pe[0] - 25.03) < 1e-9 && east.sz === 2, `${high}: east door at ${pe}`);
+  }
+});
+
+test("doors on the long sides are centred on the part, bicycle doors default to 1.2 m", () => {
+  const f = siteFrame([[0, 10], [25, 10], [25, 12.7], [0, 12.7]], { high: "south" }, 0);
+  const pt = { t0: 8, t1: 11 };
+  const low = doorSpec({ pt, f, W: f.W, hLow: 2.8, bike: true });
+  assert.ok(low.sx === 1.2 && Math.abs(low.x - f.tToU(9.5)) < 1e-9 && low.z > f.W / 2);
+  const high = doorSpec({ side: "high", pt, f, W: f.W, hLow: 2.8, width: 2.5 });
+  assert.ok(high.z < -f.W / 2 && high.sx === 2.5 && high.sy <= 2.2);
+  assert.equal(doorSpec({ side: "nonsense", pt, f, W: f.W, hLow: 2.8 }).side, "low");
+});
+
+test("carport stalls are numbered from the east end unless told otherwise", () => {
+  const car = { t0: 8.6, t1: 20.2, stalls: 4 };
+  const e = stallCenters(car);
+  assert.deepEqual(e.map((s) => s.n), [1, 2, 3, 4]);
+  assert.ok(Math.abs(e[0].t - 18.75) < 1e-9 && Math.abs(e[3].t - 10.05) < 1e-9);
+  const w = stallCenters(car, "west");
+  assert.ok(Math.abs(w[0].t - 10.05) < 1e-9 && Math.abs(w[3].t - 18.75) < 1e-9);
+});
 
 test("explicit parts: far-left garage, a free garage, four stalls, bicycle room", () => {
   const parts = partsFromList(22.9, [

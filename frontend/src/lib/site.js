@@ -85,6 +85,32 @@ export function pvGrid({ L, W, pitchDeg, orientation, portrait, fill = true, row
 }
 
 export const PART_LABELS = { garage: "Garage", carport: "Carport", bike: "Fahrradgarage", open: "Unterstand" };
+export const DOOR_SIDES = { low: "Längsseite (niedrig)", high: "Längsseite (hoch)", west: "Westende", east: "Ostende" };
+
+/**
+ * Door of a garage / bicycle room in the building's local frame (x along the long side, z across, -z = high side).
+ * side: "low" (default), "high", or "west" / "east" for the end wall at the part's west / east boundary.
+ * Returns the box size (sx, sy, sz) and the position of its centre (x, y, z), pushed 3 cm outside the wall.
+ */
+export function doorSpec({ side = "low", pt, f, W, hLow, bike = false, width }) {
+  const dh = Math.min(bike ? 2.0 : 2.2, hLow - 0.2);
+  const want = Number(width) || (bike ? 1.2 : 2.5);
+  const off = 0.03;
+  if (side === "west" || side === "east") {
+    // outwards = towards smaller t at the west boundary, larger t at the east boundary; local +x points west when the frame is flipped
+    const dir = (side === "west" ? -1 : 1) * (f.flip ? -1 : 1);
+    return { side, sx: 0.05, sy: dh, sz: Math.min(want, W - 0.3), x: f.tToU(side === "west" ? pt.t0 : pt.t1) + dir * off, y: dh / 2, z: 0 };
+  }
+  const len = Math.abs(f.tToU(pt.t1) - f.tToU(pt.t0));
+  const high = side === "high";
+  return { side: high ? "high" : "low", sx: Math.min(want, len - 0.2), sy: dh, sz: 0.05, x: (f.tToU(pt.t0) + f.tToU(pt.t1)) / 2, y: dh / 2, z: high ? -W / 2 - off : W / 2 + off };
+}
+
+/** Stall centres of a carport part as distances t from the west end, numbered 1..n from the given end (default: the east end). */
+export function stallCenters(pt, from = "east") {
+  const n = Math.max(1, Math.round(pt.stalls || 1)), w = (pt.t1 - pt.t0) / n;
+  return Array.from({ length: n }, (_, i) => ({ n: i + 1, t: from === "west" ? pt.t0 + (i + 0.5) * w : pt.t1 - (i + 0.5) * w }));
+}
 
 /**
  * Ordered parts of a building, west to east: [{ type: garage|carport|bike|open, len?, stalls?, stallWidth?, door?, name? }].

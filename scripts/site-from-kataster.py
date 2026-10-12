@@ -12,6 +12,10 @@ Usage:
 The scale (metres per pixel) is not known from the screenshot; by default it is
 chosen so the main building's cadastral footprint has the same area as the
 building outline in the plan. Pass --scale (or --house-length) to override.
+
+Per building the config may also carry "roof": "shed" with "high" (compass side of the high eave), "parts"
+(garages / carport / bicycle room, west to east), "pv", and "extend": {"westTo": x, "eastTo": x} to
+lengthen a building to a plan x coordinate (e.g. flush with the house's west wall).
 """
 import argparse
 import json
@@ -60,6 +64,23 @@ def component_polygon(mask, seed, eps=3.0, rect_ratio=0.9):
         pts = cv2.approxPolyDP(cv2.convexHull(c), 4.0, True).reshape(-1, 2).astype(float)
         kind = "poly"
     return pts, kind, clipped, rect
+
+
+def extend_ends(poly, ext):
+    """Move the short ends of a long building to given positions along its long axis (plan x, west < east):
+    ext = {"westTo": x, "eastTo": x}. The vertices at that end land on one line, i.e. the end becomes flat."""
+    P = np.array(poly, float)
+    edges = [P[(i + 1) % len(P)] - P[i] for i in range(len(P))]
+    d = max(edges, key=lambda e: float(np.hypot(*e)))
+    d = d / np.hypot(*d)
+    if d[0] < 0:
+        d = -d
+    a = P @ d
+    lo, hi, tol = a.min(), a.max(), 0.8
+    for key, sel in (("westTo", a < lo + tol), ("eastTo", a > hi - tol)):
+        if ext.get(key) is not None:
+            P[sel] += np.outer(float(ext[key]) - a[sel], d)
+    return [[round(float(x), 2), round(float(z), 2)] for x, z in P]
 
 
 def main():
@@ -168,6 +189,8 @@ def main():
     for b in BUILDINGS:
         pts, kind, clipped, _ = component_polygon(light, b["seed"])
         poly = ordered(pts)
+        if b.get("extend"):
+            poly = extend_ends(poly, b["extend"])
         if clipped:
             print("skip (clipped by image border):", b["id"])
             continue

@@ -40,7 +40,11 @@ floors[]  { id, name, elevation?, height, rooms[], walls[], openings[], devices[
   devices[]    { id, entity, x, z, y, name, showName }
   furniture[]  { id, type, x, z, rot, w, d, h, mountY, name, entity, power }
 settings  { wallExterior, wallInterior, slab, autoDevices, hiddenEntities[], roof{sections,solar,windows}, north }
-site      { north, cadastreHouse, buildings[ { id, name, points, height, levels, storeys, roof{type,pitch,overhang}, visible } ] }
+site      { north, cadastreHouse, buildings[ { id, name, points, height, levels, storeys, roof{type,pitch,overhang,high}, visible,
+                                             parts[], pv{} } ] }
+  parts[]      West → Ost: { type garage|bike|carport|open, len?, name?, door?, doorSide?, stalls?, stallWidth?, numberFrom? }
+               len leer = teilt sich den Rest; doorSide low|high|west|east (Standard low); numberFrom east|west (Standard east)
+  pv{}         { enabled, fill, rows, cols, orientation, over ("#<Index eines Teils>"), edge, wp, entity }
 ```
 
 Geräte erscheinen automatisch, wenn ein Raum einen HA-Bereich (`area`) hat; `hiddenEntities` blendet einzelne aus, Ziehen setzt ein automatisches Gerät fest (wird zu `devices[]`). Temperatur und Feuchte eines Raums kommen aus `climate` oder werden aus den Sensoren des HA-Bereichs erkannt (`device_class`).

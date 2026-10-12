@@ -602,21 +602,24 @@
     "parts": [
      {
       "type": "garage",
-      "len": 5.3
+      "len": 5.3,
+      "name": "Garage 1",
+      "doorSide": "west"
      },
      {
       "type": "garage",
-      "len": null
-     },
-     {
-      "type": "carport",
-      "stalls": 4,
-      "stallWidth": 2.9
+      "len": null,
+      "name": "Garage 2"
      },
      {
       "type": "bike",
       "len": 3,
       "door": 1.2
+     },
+     {
+      "type": "carport",
+      "stalls": 4,
+      "stallWidth": 2.9
      }
     ]
    }
