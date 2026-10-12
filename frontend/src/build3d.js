@@ -18,12 +18,12 @@ const COL = {
 };
 const DIM = { stairs: [1, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02] };
 
-export function valueSprite() {
+export function valueSprite(w = 256) {
   const c = document.createElement("canvas");
-  c.width = 256; c.height = 64;
+  c.width = w; c.height = 64;
   const tex = new THREE.CanvasTexture(c);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  sp.scale.set(1.2, 0.3, 1);
+  sp.scale.set((w / 256) * 1.2, 0.3, 1);
   sp.renderOrder = 10;
   sp.visible = false;
   sp.userData = { canvas: c, tex, text: "" };
@@ -34,12 +34,13 @@ export function setSprite(sp, text, color = "#19e6ff") {
   if (u.text === text) return;
   u.text = text;
   const x = u.canvas.getContext("2d");
-  x.clearRect(0, 0, 256, 64);
+  const W = u.canvas.width;
+  x.clearRect(0, 0, W, 64);
   x.fillStyle = "rgba(7,8,15,.75)";
-  x.beginPath(); x.roundRect(4, 8, 248, 48, 12); x.fill();
+  x.beginPath(); x.roundRect(4, 8, W - 8, 48, 12); x.fill();
   x.strokeStyle = color; x.lineWidth = 2; x.stroke();
   x.fillStyle = "#fff"; x.font = "bold 30px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
-  x.fillText(text, 128, 33);
+  x.fillText(text, W / 2, 33, W - 24);
   u.tex.needsUpdate = true;
 }
 
@@ -455,6 +456,16 @@ export function buildBuilding(plan, opts) {
         const sp = opts.label(r.name, theme);
         sp.position.set(lp[0], 0.04, lp[1]);
         g.add(sp);
+      }
+      // temperature / humidity (live): label above the room, optional floor tint
+      const cl = opts.climateFor?.(r);
+      if (cl && (cl.temperature || cl.humidity || cl.co2)) {
+        const lp = labelPoint(r.points);
+        const sp = valueSprite(448);
+        sp.scale.set(3.15, 0.45, 1);
+        sp.position.set(lp[0], 1.05, lp[1]);
+        g.add(sp);
+        ctx.dyn.push({ kind: "climate", ...cl, sprite: sp, mat, base: { color: mat.color.clone(), emissive: mat.emissive.clone(), ei: mat.emissiveIntensity } });
       }
     });
 

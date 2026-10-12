@@ -78,6 +78,10 @@ class HomePlan3DView extends HTMLElement {
     this.grid = 0.1;
     this.showRoof = true;
     this.showSite = true;
+    this.showClimate = true;
+    this.heatmap = false;
+    this.hasClimate = false;
+    this.multi = [];
     this.theme = "neon";
     this.undoStack = [];
     this._labels = new Map();
@@ -96,6 +100,8 @@ class HomePlan3DView extends HTMLElement {
     this.theme = this.cfg.theme === "day" ? "day" : "neon";
     this.showRoof = this.cfg.show_roof !== false;
     this.showSite = this.cfg.show_site !== false;
+    this.showClimate = this.cfg.show_climate !== false;
+    this.heatmap = !!this.cfg.heatmap;
     if (this._ready) { this.renderBar(); this.rebuild3D(); }
   }
 
@@ -224,6 +230,10 @@ class HomePlan3DView extends HTMLElement {
     t.innerHTML = "";
     if (roofSections(this.plan).length) t.append(mk("Dach", this.showRoof ? "on" : "", () => { this.showRoof = !this.showRoof; this.renderBar(); this.rebuild3D(); }));
     if (this.plan.site?.buildings?.length) t.append(mk("Gelände", this.showSite ? "on" : "", () => { this.showSite = !this.showSite; this.renderBar(); this.rebuild3D(); this.draw2D(); }, "Weitere Gebäude auf dem Flurstück"));
+    if (this.hasClimate) {
+      t.append(mk("🌡 Klima", this.showClimate ? "on" : "", () => { this.showClimate = !this.showClimate; this.renderBar(); this.updateStates(); }, "Temperatur und Luftfeuchte in den Räumen"));
+      t.append(mk("🔥 Wärme", this.heatmap ? "on" : "", () => { this.heatmap = !this.heatmap; this.renderBar(); this.updateStates(); }, "Räume nach Temperatur einfärben"));
+    }
     t.append(mk(this.theme === "day" ? "☀" : "🌙", "", () => { this.theme = this.theme === "day" ? "neon" : "day"; this.renderBar(); this.rebuild3D(); }, "Darstellung wechseln"));
 
     const tools = this.$("#tools");
@@ -249,7 +259,10 @@ class HomePlan3DView extends HTMLElement {
   fit2D() {
     const c = this.edCanvas;
     if (!c.width) return;
-    const pts = [...this.floor.rooms.flatMap((r) => r.points), ...(this.showSite ? (this.plan.site?.buildings || []).flatMap((b) => b.points) : [])];
+    // fit the house (current floor); the outbuildings are usually far away and can be reached by zooming out
+    let pts = this.floor.rooms.flatMap((r) => r.points);
+    if (!pts.length) pts = this.plan.floors.flatMap((f) => f.rooms.flatMap((r) => r.points));
+    if (!pts.length) pts = (this.plan.site?.buildings || []).flatMap((b) => b.points);
     if (!pts.length) return;
     const [x0, z0, x1, z1] = bbox(pts);
     this.cam2.x = (x0 + x1) / 2;
@@ -261,12 +274,12 @@ class HomePlan3DView extends HTMLElement {
   // ---------------------------------------------------------- side panel (editor)
   formHtml(obj, defs) {
     return defs.map((d) => {
-      const v = getPath(obj, d.k);
+      const v = getPath(obj, d.k) ?? d.def;
       const a = `data-k="${d.k}" data-t="${d.t || "text"}"`;
       if (d.t === "select") return `<label>${d.l}</label><select ${a}>${d.o.map((o) => { const [val, lab] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}" ${val === v ? "selected" : ""}>${esc(lab)}</option>`; }).join("")}</select>`;
       if (d.t === "checkbox") return `<label><input type="checkbox" ${a} ${v ? "checked" : ""}>${d.l}</label>`;
       if (d.t === "number") return `<label>${d.l}</label><input ${a} type="number" step="${d.s || 0.05}" value="${v ?? ""}" placeholder="${d.p || ""}">`;
-      return `<label>${d.l}</label><input ${a} ${d.t === "color" ? 'type="color"' : ""} ${d.list ? `list="${d.list}"` : ""} value="${esc(v ?? "")}">`;
+      return `<label>${d.l}</label><input ${a} ${d.t === "color" ? 'type="color"' : ""} ${d.list ? `list="${d.list}"` : ""} ${d.p ? `placeholder="${esc(d.p)}"` : ""} value="${esc(v ?? "")}">`;
     }).join("");
   }
   bindForm(root, obj, after) {
@@ -293,7 +306,7 @@ class HomePlan3DView extends HTMLElement {
     const h = this._hass;
     const fl = this.floor;
     const hints = {
-      select: "Ziehen verschiebt, Entf löscht, Strg+Z macht rückgängig",
+      select: "Ziehen verschiebt · Entf löscht · leere Fläche aufziehen wählt mehrere · Umschalt+Klick fügt hinzu · Strg+Z",
       rect: "Diagonal aufziehen", room: "Punkte klicken, Doppelklick schließt", wall: "Start/Ende klicken, Esc beendet",
       door: "Auf eine Wand klicken", window: "Auf eine Wand klicken", furn: "Typ wählen, dann in den Raum klicken",
       device: "Entität wählen, dann in den Raum klicken", building: "Gebäude auf dem Gelände diagonal aufziehen", erase: "Element anklicken",
@@ -318,16 +331,26 @@ class HomePlan3DView extends HTMLElement {
     const s = this.sel;
     const find = (arr, id) => arr.find((x) => x.id === id);
     let obj = null, selHtml = "";
-    if (s?.kind === "room") {
+    if (this.multi.length > 1) {
+      const kinds = {};
+      this.multi.forEach((m) => (kinds[m.kind] = (kinds[m.kind] || 0) + 1));
+      const names = { device: "Geräte", furniture: "Möbel", opening: "Öffnungen", room: "Räume", wall: "Wände", site: "Gebäude" };
+      selHtml += `<h4>Auswahl</h4><div style="font-size:12px;opacity:.85">${this.multi.length} Elemente: ${Object.entries(kinds).map(([k, n]) => `${n} ${names[k] || k}`).join(", ")}</div>
+        <button class="full" id="multi-del">🗑 Auswahl entfernen</button>
+        <div style="font-size:11px;opacity:.6;margin-top:4px">Automatisch platzierte Geräte werden ausgeblendet. Ziehen verschiebt die ganze Auswahl.</div>`;
+    } else if (s?.kind === "room") {
       obj = find(fl.rooms, s.id);
       if (obj) {
         const areas = Object.values(h?.areas || {});
+        const auto = this.areaClimate(obj.area);
         selHtml += `<h4>Raum</h4>${this.formHtml(obj, [
           { k: "name", l: "Name" },
           { k: "area", l: "HA-Bereich (Geräte automatisch)", t: "select", o: [["", "– keiner –"], ...areas.map((a) => [a.area_id, a.name]), ...(obj.area && !areas.some((a) => a.area_id === obj.area) ? [[obj.area, obj.area]] : [])] },
           { k: "color", l: "Farbe", t: "color" },
-          { k: "climate.temperature", l: "Temperatur-Sensor", list: "ents" },
-          { k: "climate.humidity", l: "Feuchte-Sensor", list: "ents" },
+          { k: "autoDevices", l: "Geräte aus dem HA-Bereich automatisch platzieren", t: "checkbox", def: true },
+          { k: "climate.temperature", l: "Temperatur-Sensor", list: "ents", p: auto.temperature ? `automatisch: ${auto.temperature}` : "" },
+          { k: "climate.humidity", l: "Feuchte-Sensor", list: "ents", p: auto.humidity ? `automatisch: ${auto.humidity}` : "" },
+          { k: "climate.co2", l: "CO₂-Sensor", list: "ents", p: auto.co2 ? `automatisch: ${auto.co2}` : "" },
         ])}<div class="hint2" style="opacity:.6;font-size:11px;margin-top:6px">${polyArea(obj.points).toFixed(1)} m²</div>`;
       }
     } else if (s?.kind === "wall") {
@@ -336,6 +359,12 @@ class HomePlan3DView extends HTMLElement {
     } else if (s?.kind === "device") {
       obj = find(fl.devices, s.id);
       if (obj) selHtml += `<h4>Gerät</h4>${this.formHtml(obj, [{ k: "entity", l: "Entität", list: "ents" }, { k: "name", l: "Anzeigename" }, { k: "showName", l: "Name anzeigen", t: "checkbox" }, { k: "y", l: "Höhe (m)", t: "number", p: "auto" }])}`;
+      else if (this.isAuto(s)) {
+        const d = this.itemOf(s);
+        if (d) selHtml += `<h4>Gerät (automatisch)</h4><div style="font-size:12px;opacity:.85;word-break:break-all">${esc(d.entity)}</div>
+          <div style="font-size:11px;opacity:.6;margin:4px 0">Aus dem HA-Bereich des Raums platziert. Ziehen setzt es fest, Entf blendet es aus.</div>
+          <button class="full" id="auto-pin">📌 Festsetzen</button><button class="full" id="auto-hide">🙈 Ausblenden</button>`;
+      }
     } else if (s?.kind === "opening") {
       obj = find(fl.openings, s.id);
       if (obj) selHtml += `<h4>${obj.type === "door" ? "Tür" : "Fenster"}</h4>${this.formHtml(obj, [
@@ -362,6 +391,15 @@ class HomePlan3DView extends HTMLElement {
 
     if (selHtml) html += `<div data-obj="sel">${selHtml}</div>`;
 
+    const devs = this.deviceList(fl);
+    const nAuto = devs.filter((d) => !d.explicit).length;
+    const nHidden = (this.plan.settings.hiddenEntities || []).length;
+    html += `<h4>Geräte dieser Etage (${devs.length})</h4>
+      <input id="devfilter" placeholder="Filter …" value="${esc(this._devFilter || "")}">
+      <div id="devlist" style="max-height:220px;overflow:auto;margin-top:4px"></div>
+      <div class="row"><button id="dev-selall">Alle wählen</button><button id="dev-hideauto" ${nAuto ? "" : "disabled"}>Auto ausblenden (${nAuto})</button></div>
+      <button class="full" id="dev-restore" ${nHidden ? "" : "disabled"}>↺ Ausgeblendete zeigen (${nHidden})</button>`;
+
     html += `<h4>Import</h4>
       <button class="full" id="imp-live">⇩ Von NeonPlan 3D übernehmen</button>
       <button class="full" id="imp-file">📂 Datei laden (NeonPlan / Plan / Gelände)</button>
@@ -378,10 +416,58 @@ class HomePlan3DView extends HTMLElement {
     side.querySelector("#grid").onchange = (e) => { this.grid = +e.target.value; };
     side.querySelector("#pent")?.addEventListener("change", (e) => (this.pendingEntity = e.target.value));
     side.querySelector("#ftype")?.addEventListener("change", (e) => (this.furnType = e.target.value));
+    this.fillDevList();
+    side.querySelector("#devfilter").oninput = (e) => { this._devFilter = e.target.value; this.fillDevList(); };
+    side.querySelector("#dev-selall").onclick = () => {
+      this.multi = this.deviceList(this.floor).map((d) => ({ kind: "device", id: d.id }));
+      this.sel = this.multi.length === 1 ? this.multi[0] : null;
+      this.renderSide(); this.draw2D();
+    };
+    side.querySelector("#dev-hideauto").onclick = () => {
+      this.pushUndo();
+      this.deviceList(this.floor).filter((d) => !d.explicit).forEach((d) => this.hideEntity(d.entity));
+      this.changed({ side: true });
+    };
+    side.querySelector("#dev-restore").onclick = () => { this.pushUndo(); this.plan.settings.hiddenEntities = []; this.changed({ side: true }); };
+    side.querySelector("#multi-del")?.addEventListener("click", () => this.deleteHits([...this.multi]));
+    side.querySelector("#auto-hide")?.addEventListener("click", () => this.deleteHits([s]));
+    side.querySelector("#auto-pin")?.addEventListener("click", () => {
+      const src = this.itemOf(s);
+      if (!src) return;
+      this.pushUndo();
+      const d = { id: uid(), entity: src.entity, x: src.x, z: src.z };
+      fl.devices.push(d);
+      this.sel = { kind: "device", id: d.id };
+      this.changed({ side: true });
+    });
     side.querySelector("#imp-live").onclick = () => this.importLive();
     side.querySelector("#imp-file").onclick = () => this.importFile();
     side.querySelector("#exp-file").onclick = () => this.exportFile();
   }
+  fillDevList() {
+    const box = this.$("#devlist");
+    if (!box) return;
+    const f = (this._devFilter || "").toLowerCase();
+    const st = this._hass?.states || {};
+    const nameOf = (d) => d.name || st[d.entity]?.attributes?.friendly_name || d.entity;
+    const rows = this.deviceList(this.floor).filter((d) => !f || d.entity.toLowerCase().includes(f) || nameOf(d).toLowerCase().includes(f));
+    box.innerHTML = "";
+    rows.slice(0, 300).forEach((d) => {
+      const row = document.createElement("div");
+      row.className = "dev" + (this.isSel(d.id) ? " on" : "");
+      row.innerHTML = `<div style="min-width:0;flex:1"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nameOf(d))}</b><span class="s">${d.explicit ? "" : "auto · "}${esc(d.entity)}</span></div><button title="Entfernen" data-del>🗑</button>`;
+      row.onclick = (e) => {
+        if (e.target.closest("[data-del]")) { this.deleteHits([{ kind: "device", id: d.id }]); return; }
+        this.sel = { kind: "device", id: d.id };
+        this.multi = [];
+        this.cam2.x = d.x; this.cam2.z = d.z;
+        this.renderSide(); this.draw2D();
+      };
+      box.append(row);
+    });
+    if (!rows.length) box.innerHTML = '<div style="opacity:.6;padding:6px">Keine Geräte</div>';
+  }
+
   // ---------------------------------------------------------- import / export
   async importLive() {
     try {
@@ -440,10 +526,12 @@ class HomePlan3DView extends HTMLElement {
     const list = floor.devices.map((d) => ({ ...d, explicit: true }));
     if (!h?.entities || !this.plan.settings.autoDevices) return list;
     const placed = new Set(this.plan.floors.flatMap((f) => f.devices.map((d) => d.entity)));
+    const hidden = new Set(this.plan.settings.hiddenEntities || []);
     floor.rooms.forEach((r) => {
-      if (!r.area) return;
-      const ents = Object.keys(h.states).filter((e) => {
-        if (placed.has(e) || !AUTO_DOMAINS.includes(domainOf(e))) return false;
+      if (!r.area || r.autoDevices === false) return;
+      // layout over all candidates so positions stay put when single devices are pinned or hidden
+      const ents = Object.keys(h.states).sort().filter((e) => {
+        if (!AUTO_DOMAINS.includes(domainOf(e))) return false;
         const reg = h.entities[e];
         if (!reg || reg.hidden) return false;
         const area = reg.area_id || h.devices?.[reg.device_id]?.area_id;
@@ -460,9 +548,58 @@ class HomePlan3DView extends HTMLElement {
         if (p[1] > z1) { out.push([(x0 + x1) / 2, (z0 + z1) / 2]); continue; }
         if (inPoly(p, r.points)) out.push(p);
       }
-      ents.forEach((e, i) => list.push({ id: "auto:" + e, entity: e, x: out[i][0], z: out[i][1], explicit: false }));
+      ents.forEach((e, i) => { if (!placed.has(e) && !hidden.has(e)) list.push({ id: "auto:" + e, entity: e, x: out[i][0], z: out[i][1], explicit: false }); });
     });
     return list;
+  }
+
+  // ---------------------------------------------------------- room climate (temperature / humidity)
+  /** Climate sensors of a room: explicit ones from the plan, otherwise detected from the HA area. */
+  climateFor(room) {
+    const c = room.climate || {};
+    const auto = room.area ? this.areaClimate(room.area) : {};
+    return { temperature: c.temperature || auto.temperature || null, humidity: c.humidity || auto.humidity || null, co2: c.co2 || auto.co2 || null };
+  }
+  areaClimate(area) {
+    const out = { temperature: null, humidity: null, co2: null };
+    const h = this._hass;
+    if (!area || !h?.entities) return out;
+    const sig = Object.keys(h.entities).length + "|" + Object.keys(h.states).length;
+    if (this._areaClimate?.sig !== sig) this._areaClimate = { sig, map: new Map() };
+    if (this._areaClimate.map.has(area)) return this._areaClimate.map.get(area);
+    const classes = { temperature: "temperature", humidity: "humidity", carbon_dioxide: "co2" };
+    for (const e of Object.keys(h.states).sort()) {
+      if (domainOf(e) !== "sensor") continue;
+      const reg = h.entities[e];
+      if (!reg || reg.hidden || (reg.entity_category && reg.entity_category !== "none")) continue;
+      if ((reg.area_id || h.devices?.[reg.device_id]?.area_id) !== area) continue;
+      const k = classes[h.states[e].attributes?.device_class];
+      if (k && !out[k]) out[k] = e;
+    }
+    this._areaClimate.map.set(area, out);
+    return out;
+  }
+  updateClimate(d) {
+    const st = this._hass?.states;
+    if (!st) return;
+    const num = (e) => { const v = e && st[e] ? parseFloat(st[e].state) : NaN; return Number.isFinite(v) ? v : null; };
+    const t = num(d.temperature), hu = num(d.humidity), co = num(d.co2);
+    const parts = [];
+    if (t != null) parts.push(`${t.toFixed(1)} °C`);
+    if (hu != null) parts.push(`${Math.round(hu)} %`);
+    if (co != null) parts.push(`${Math.round(co)} ppm`);
+    const col = new THREE.Color().setHSL((220 - ((Math.max(15, Math.min(28, t ?? 21)) - 15) / 13) * 220) / 360, 0.85, 0.55);
+    if (parts.length) setSprite(d.sprite, parts.join(" · "), t != null ? "#" + col.getHexString() : "#19e6ff");
+    d.sprite.visible = this.showClimate && parts.length > 0;
+    if (this.heatmap && t != null) {
+      d.mat.color.copy(col).multiplyScalar(0.35);
+      d.mat.emissive.copy(col);
+      d.mat.emissiveIntensity = 0.6;
+    } else {
+      d.mat.color.copy(d.base.color);
+      d.mat.emissive.copy(d.base.emissive);
+      d.mat.emissiveIntensity = d.base.ei;
+    }
   }
 
   // ---------------------------------------------------------- 3D
@@ -543,12 +680,15 @@ class HomePlan3DView extends HTMLElement {
       showRoof: this.showRoof,
       showSite: this.showSite,
       devicesFor: (f) => this.deviceList(f),
+      climateFor: (r) => this.climateFor(r),
       glowTex: () => this.glowTex(),
       label: (t, theme) => this.label(t, theme),
     });
     this.world.add(res.root);
     this.dyn = res.dyn;
     this.pickables = res.pickables;
+    const hc = this.dyn.some((d) => d.kind === "climate");
+    if (hc !== this.hasClimate) { this.hasClimate = hc; this.renderBar(); }
     const ext = this.extent();
     if (ext) {
       const grid = new THREE.GridHelper(120, 120, this.theme === "day" ? 0xb8c2d6 : 0x1d3057, this.theme === "day" ? 0xcfd6e6 : 0x101c36);
@@ -592,6 +732,7 @@ class HomePlan3DView extends HTMLElement {
     const st = this._hass?.states;
     if (!st) return;
     for (const d of this.dyn) {
+      if (d.kind === "climate") { this.updateClimate(d); continue; }
       const s = st[d.entity];
       if (!s) continue;
       const on = !OFF_STATES.includes(s.state);
@@ -657,7 +798,7 @@ class HomePlan3DView extends HTMLElement {
     side.classList.remove("hidden");
     const st = this._hass.states;
     const devs = this.deviceList(fl).filter((d) => inPoly([d.x, d.z], room.points));
-    const cl = room.climate || {};
+    const cl = this.climateFor(room);
     const val = (e, unit) => (e && st[e] && st[e].state !== "unavailable" ? `${st[e].state}${unit}` : null);
     const climate = [val(cl.temperature, " °C"), val(cl.humidity, " %"), val(cl.co2, " ppm")].filter(Boolean).join(" · ");
     side.innerHTML = `<b>${esc(room.name)}</b>${climate ? `<div style="opacity:.8;margin:4px 0 6px">${climate}</div>` : ""}${devs.length ? "" : "<p style='opacity:.6'>Keine Geräte</p>"}`;
@@ -709,12 +850,23 @@ class HomePlan3DView extends HTMLElement {
       const p = world(e), raw = world(e, false), fl = this.floor, t = this.tool;
       if (t === "select") {
         const hit = this.hit2D(raw);
-        this.sel = hit;
-        if (hit) drag = { hit, start: p, orig: this.snapshotFor(hit), undone: false };
+        if (e.shiftKey && hit) { // add to / remove from the multi selection
+          const cur = this.multi.length ? this.multi : this.sel ? [this.sel] : [];
+          this.multi = cur.some((m) => m.id === hit.id) ? cur.filter((m) => m.id !== hit.id) : [...cur, hit];
+          this.sel = this.multi.length === 1 ? this.multi[0] : null;
+        } else if (hit) {
+          const inMulti = this.multi.length > 1 && this.multi.some((m) => m.id === hit.id);
+          if (!inMulti) { this.multi = []; this.sel = hit; }
+          const group = inMulti ? this.multi : [hit];
+          drag = { items: group.map((h) => ({ hit: h, orig: this.snapshotFor(h) })), start: p, undone: false };
+        } else {
+          this.sel = null; this.multi = [];
+          drag = { marquee: raw };
+        }
         this.renderSide(); this.draw2D();
       } else if (t === "erase") {
         const hit = this.hit2D(raw);
-        if (hit) { this.pushUndo(); this.deleteItem(hit); }
+        if (hit) this.deleteHits([hit]);
       } else if (t === "rect" || t === "building") drag = { rect: p };
       else if (t === "room") {
         if (this.draft.length > 2 && Math.hypot(p[0] - this.draft[0][0], p[1] - this.draft[0][1]) < 0.01) this.finishRoom();
@@ -746,9 +898,10 @@ class HomePlan3DView extends HTMLElement {
         this.cam2.x = pan.cx - ((e.clientX - pan.x) * devicePixelRatio) / this.cam2.s;
         this.cam2.z = pan.cz - ((e.clientY - pan.y) * devicePixelRatio) / this.cam2.s;
       } else if (drag?.rect) { drag.cur = this.mouse; this.rectPrev = [drag.rect, this.mouse]; }
-      else if (drag?.hit) {
-        if (!drag.undone) { this.pushUndo(); drag.undone = true; }
-        this.moveItem(drag, this.mouse, world(e, false));
+      else if (drag?.marquee) this.marquee = [drag.marquee, world(e, false)];
+      else if (drag?.items) {
+        if (!drag.undone) { this.pushUndo(); drag.undone = true; this.pinAutos(drag); }
+        this.moveItems(drag, this.mouse, world(e, false));
       }
       this.draw2D();
     });
@@ -771,15 +924,18 @@ class HomePlan3DView extends HTMLElement {
           }
           this.tool = "select"; this.renderBar(); this.changed({ side: true });
         }
-      } else if (drag?.hit) this.rebuild3D();
-      drag = null; pan = null; this.rectPrev = null; this.draw2D();
+      } else if (drag?.marquee && this.marquee) {
+        const [a, b] = this.marquee;
+        if ((Math.hypot(b[0] - a[0], b[1] - a[1]) * this.cam2.s) / devicePixelRatio > 6) { this.selectInRect(a, b); this.renderSide(); }
+      } else if (drag?.items) this.rebuild3D();
+      drag = null; pan = null; this.rectPrev = null; this.marquee = null; this.draw2D();
     });
     c.addEventListener("dblclick", () => { if (this.tool === "room") { this.draft.pop(); this.finishRoom(); } else if (this.tool === "wall") this.draft = []; });
     c.addEventListener("contextmenu", (e) => e.preventDefault());
     c.tabIndex = 0;
     c.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { this.draft = []; this.draw2D(); }
-      if ((e.key === "Delete" || e.key === "Backspace") && this.sel) { this.pushUndo(); this.deleteItem(this.sel); }
+      if ((e.key === "Delete" || e.key === "Backspace") && (this.multi.length || this.sel)) this.deleteHits(this.multi.length > 1 ? this.multi : [this.sel]);
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); this.undo(); }
     });
   }
@@ -821,7 +977,7 @@ class HomePlan3DView extends HTMLElement {
   }
   hit2D(p) {
     const fl = this.floor, tol = 12 / this.cam2.s;
-    for (const d of this.deviceList(fl)) if (Math.hypot(p[0] - d.x, p[1] - d.z) < tol) return d.explicit ? { kind: "device", id: d.id } : null;
+    for (const d of this.deviceList(fl)) if (Math.hypot(p[0] - d.x, p[1] - d.z) < tol) return { kind: "device", id: d.id };
     for (const o of fl.openings) if (Math.hypot(p[0] - o.x, p[1] - o.z) < Math.max(tol, o.w / 2)) return { kind: "opening", id: o.id };
     for (const f of [...fl.furniture].reverse()) {
       const dx = p[0] - f.x, dz = p[1] - f.z, r = rad(f.rot || 0);
@@ -844,7 +1000,47 @@ class HomePlan3DView extends HTMLElement {
   itemOf(hit) {
     const fl = this.floor;
     const arr = { room: fl.rooms, wall: fl.walls, device: fl.devices, opening: fl.openings, furniture: fl.furniture, site: this.plan.site?.buildings || [] }[hit.kind];
-    return arr?.find((x) => x.id === hit.id);
+    const it = arr?.find((x) => x.id === hit.id);
+    if (!it && hit.kind === "device" && String(hit.id).startsWith("auto:")) return this.deviceList(fl).find((d) => d.id === hit.id);
+    return it;
+  }
+  isSel(id) { return this.sel?.id === id || this.multi.some((m) => m.id === id); }
+  isAuto(hit) { return hit?.kind === "device" && String(hit.id).startsWith("auto:"); }
+  hideEntity(e) {
+    const arr = (this.plan.settings.hiddenEntities ||= []);
+    if (!arr.includes(e)) arr.push(e);
+  }
+  // would this entity be placed automatically by the HA area of one of the rooms?
+  isAutoCandidate(e) {
+    const h = this._hass, reg = h?.entities?.[e];
+    if (!reg || !AUTO_DOMAINS.includes(domainOf(e))) return false;
+    const area = reg.area_id || h.devices?.[reg.device_id]?.area_id;
+    return !!area && this.plan.floors.some((f) => f.rooms.some((r) => r.area === area && r.autoDevices !== false));
+  }
+  // turn automatically placed devices of a drag into real (pinned) devices before they move
+  pinAutos(drag) {
+    const srcs = drag.items.map((it) => (this.isAuto(it.hit) ? this.itemOf(it.hit) : null)); // read all positions first
+    drag.items.forEach((it, i) => {
+      if (!srcs[i]) return;
+      const d = { id: uid(), entity: srcs[i].entity, x: srcs[i].x, z: srcs[i].z };
+      this.floor.devices.push(d);
+      const old = it.hit.id;
+      it.hit = { kind: "device", id: d.id };
+      it.orig = [d.x, d.z];
+      if (this.sel?.id === old) this.sel = it.hit;
+      this.multi = this.multi.map((m) => (m.id === old ? it.hit : m));
+    });
+  }
+  selectInRect(a, b) {
+    const fl = this.floor;
+    const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])], [z0, z1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+    const inside = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+    const hits = [];
+    // the rectangle only picks devices (bulk removal of furniture or doors by accident would be too easy);
+    // shift+click adds anything else
+    this.deviceList(fl).forEach((d) => inside(d.x, d.z) && hits.push({ kind: "device", id: d.id }));
+    this.multi = hits;
+    this.sel = hits.length === 1 ? hits[0] : null;
   }
   snapshotFor(hit) {
     const it = this.itemOf(hit);
@@ -852,8 +1048,10 @@ class HomePlan3DView extends HTMLElement {
     if (hit.kind === "wall") return clone([it.a, it.b]);
     return [it.x, it.z];
   }
-  moveItem(drag, m, raw) {
-    const { hit, start, orig } = drag;
+  moveItems(drag, m, raw) {
+    drag.items.forEach((it) => this.moveOne(it.hit, it.orig, drag.start, m, raw));
+  }
+  moveOne(hit, orig, start, m, raw) {
     const it = this.itemOf(hit);
     if (!it) return;
     const dx = m[0] - start[0], dz = m[1] - start[1];
@@ -869,19 +1067,31 @@ class HomePlan3DView extends HTMLElement {
       }
     } else { it.x = orig[0] + dx; it.z = orig[1] + dz; }
   }
-  deleteItem(hit) {
+  // delete one or many items as a single undo step; automatically placed devices are hidden instead
+  deleteHits(hits) {
+    if (!hits.length) return;
+    this.pushUndo();
+    hits.forEach((h) => this.deleteOne(h));
+    this.sel = null;
+    this.multi = [];
+    this.changed({ side: true });
+  }
+  deleteOne(hit) {
     const fl = this.floor;
     if (hit.kind === "room" && hit.vertex != null && this.tool === "erase") {
       const r = fl.rooms.find((x) => x.id === hit.id);
-      if (r.points.length > 3) { r.points.splice(hit.vertex, 1); this.sel = null; this.changed({ side: true }); return; }
+      if (r.points.length > 3) { r.points.splice(hit.vertex, 1); return; }
     }
-    if (hit.kind === "site") this.plan.site.buildings = this.plan.site.buildings.filter((x) => x.id !== hit.id);
+    if (hit.kind === "device") {
+      const dev = this.itemOf(hit);
+      if (!dev) return;
+      if (!this.isAuto(hit)) fl.devices = fl.devices.filter((x) => x.id !== hit.id);
+      if (this.isAuto(hit) || this.isAutoCandidate(dev.entity)) this.hideEntity(dev.entity); // would otherwise reappear from the HA area
+    } else if (hit.kind === "site") this.plan.site.buildings = this.plan.site.buildings.filter((x) => x.id !== hit.id);
     else {
-      const key = { room: "rooms", wall: "walls", device: "devices", opening: "openings", furniture: "furniture" }[hit.kind];
+      const key = { room: "rooms", wall: "walls", opening: "openings", furniture: "furniture" }[hit.kind];
       fl[key] = fl[key].filter((x) => x.id !== hit.id);
     }
-    this.sel = null;
-    this.changed({ side: true });
   }
 
   draw2D() {
@@ -900,7 +1110,7 @@ class HomePlan3DView extends HTMLElement {
       x.setLineDash([8 * dpr, 5 * dpr]);
       (this.plan.site?.buildings || []).forEach((b) => {
         if (b.visible === false) return;
-        const sel = this.sel?.id === b.id;
+        const sel = this.isSel(b.id);
         this.path(x, b.points, true);
         x.fillStyle = "rgba(255,179,71,.08)"; x.fill();
         x.strokeStyle = sel ? "#fff" : "#ffb347"; x.lineWidth = (sel ? 3 : 2) * dpr; x.stroke();
@@ -917,7 +1127,7 @@ class HomePlan3DView extends HTMLElement {
     if (below) { x.strokeStyle = "#2b3558"; x.lineWidth = dpr; below.rooms.forEach((r) => { this.path(x, r.points, true); x.stroke(); }); }
 
     fl.rooms.forEach((r) => {
-      const sel = this.sel?.id === r.id;
+      const sel = this.isSel(r.id);
       this.path(x, r.points, true);
       x.fillStyle = (r.color || "#19e6ff") + "22"; x.fill();
       x.strokeStyle = sel ? "#fff" : r.color || "#19e6ff"; x.lineWidth = (sel ? 3 : 1.5) * dpr; x.shadowColor = r.color || "#19e6ff"; x.shadowBlur = sel ? 8 : 0; x.stroke(); x.shadowBlur = 0;
@@ -947,7 +1157,7 @@ class HomePlan3DView extends HTMLElement {
         x.strokeStyle = "#ff2bd6"; x.lineWidth = dpr; x.beginPath();
         x.moveTo(hx, 0); x.lineTo(hx, sw * o.w * s); x.arc(hx, 0, o.w * s, sw * Math.PI / 2, o.hinge === "right" ? (sw > 0 ? Math.PI : -Math.PI) : 0, o.hinge === "right" ? sw < 0 : sw > 0); x.stroke();
       }
-      if (this.sel?.id === o.id) { x.strokeStyle = "#fff"; x.lineWidth = 2 * dpr; x.strokeRect(-half, -6 * dpr, half * 2, 12 * dpr); }
+      if (this.isSel(o.id)) { x.strokeStyle = "#fff"; x.lineWidth = 2 * dpr; x.strokeRect(-half, -6 * dpr, half * 2, 12 * dpr); }
       x.restore();
     });
 
@@ -955,7 +1165,7 @@ class HomePlan3DView extends HTMLElement {
       const cs = furnitureCorners(f).map(w2s);
       x.beginPath(); cs.forEach((q, i) => (i ? x.lineTo(...q) : x.moveTo(...q))); x.closePath();
       x.fillStyle = f.type === "rug" ? "rgba(143,107,179,.25)" : "rgba(224,176,128,.28)"; x.fill();
-      x.strokeStyle = this.sel?.id === f.id ? "#fff" : "#e0b080"; x.lineWidth = (this.sel?.id === f.id ? 2.5 : 1) * dpr; x.stroke();
+      x.strokeStyle = this.isSel(f.id) ? "#fff" : "#e0b080"; x.lineWidth = (this.isSel(f.id) ? 2.5 : 1) * dpr; x.stroke();
       if (s > 25) { const q = w2s([f.x, f.z]); x.fillStyle = "#e8d5bd"; x.font = `${9 * dpr}px sans-serif`; x.textAlign = "center"; x.fillText(f.name || f.type, q[0], q[1] + 3 * dpr); }
     });
 
@@ -963,7 +1173,7 @@ class HomePlan3DView extends HTMLElement {
       const q = w2s([d.x, d.z]);
       x.beginPath(); x.arc(q[0], q[1], 6 * dpr, 0, 7);
       x.fillStyle = d.explicit ? "#ffd08a" : "#88889a"; x.fill();
-      x.strokeStyle = this.sel?.id === d.id ? "#fff" : "#000"; x.lineWidth = 2 * dpr; x.stroke();
+      x.strokeStyle = this.isSel(d.id) ? "#fff" : "#000"; x.lineWidth = (this.isSel(d.id) ? 3 : 2) * dpr; x.stroke();
       if (s > 25) { x.fillStyle = "#cdd6f4"; x.font = `${9 * dpr}px sans-serif`; x.textAlign = "left"; x.fillText(d.name || d.entity.split(".")[1] || d.entity, q[0] + 9 * dpr, q[1] + 3 * dpr); }
     });
 
@@ -971,6 +1181,11 @@ class HomePlan3DView extends HTMLElement {
       x.strokeStyle = "#fff"; x.setLineDash([6, 4]); x.lineWidth = 2 * dpr;
       this.path(x, [...this.draft, this.mouse], false); x.stroke(); x.setLineDash([]);
       if (this.tool === "wall") this.dim(x, this.draft[0], this.mouse);
+    }
+    if (this.marquee) {
+      const [a, b] = this.marquee.map(w2s);
+      x.fillStyle = "rgba(25,230,255,.08)"; x.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+      x.strokeStyle = "#19e6ff"; x.setLineDash([5, 4]); x.lineWidth = dpr; x.strokeRect(a[0], a[1], b[0] - a[0], b[1] - a[1]); x.setLineDash([]);
     }
     if (this.rectPrev) {
       const [a, b] = this.rectPrev.map(w2s);

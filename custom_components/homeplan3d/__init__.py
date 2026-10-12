@@ -18,19 +18,27 @@ from .const import DOMAIN, MAX_PLAN_BYTES, STORAGE_KEY, STORAGE_VERSION, URL_BAS
 EMPTY_PLAN = {"version": 1, "floors": []}
 
 
+def _asset_version(www: Path, version: str) -> str:
+    """Version string for the JS URL; the file's mtime makes a reload pick up a replaced bundle."""
+    try:
+        return f"{version}-{int((www / 'homeplan3d.js').stat().st_mtime)}"
+    except OSError:
+        return version
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
     plan = await store.async_load() or dict(EMPTY_PLAN)
-    hass.data[DOMAIN] = {"store": store, "plan": plan}
 
     www = Path(__file__).parent / "www"
-    version = (await async_get_integration(hass, DOMAIN)).version
+    version = str((await async_get_integration(hass, DOMAIN)).version)
     if not hass.data.get(f"{DOMAIN}_static"):  # routes cannot be removed again, register only once
         await hass.http.async_register_static_paths(
             [StaticPathConfig(URL_BASE, str(www), False)]
         )
         hass.data[f"{DOMAIN}_static"] = True
-    url = f"{URL_BASE}/homeplan3d.js?v={version}"
+    url = f"{URL_BASE}/homeplan3d.js?v={await hass.async_add_executor_job(_asset_version, www, version)}"
+    hass.data[DOMAIN] = {"store": store, "plan": plan, "url": url}
     frontend.add_extra_js_url(hass, url)
     await panel_custom.async_register_panel(
         hass,
@@ -49,7 +57,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     frontend.async_remove_panel(hass, "homeplan3d")
-    hass.data.pop(DOMAIN, None)
+    data = hass.data.pop(DOMAIN, None)
+    if data:
+        frontend.remove_extra_js_url(hass, data["url"])
     return True
 
 
@@ -73,7 +83,10 @@ async def ws_save(hass, connection, msg):
     if len(json.dumps(plan)) > MAX_PLAN_BYTES:
         connection.send_error(msg["id"], "too_large", "plan too large")
         return
-    data = hass.data[DOMAIN]
+    data = hass.data.get(DOMAIN)
+    if data is None:
+        connection.send_error(msg["id"], "not_loaded", "Home Plan 3D is not loaded")
+        return
     data["plan"] = plan
     await data["store"].async_save(plan)
     connection.send_result(msg["id"], {"ok": True})

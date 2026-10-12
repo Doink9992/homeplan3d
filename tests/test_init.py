@@ -68,3 +68,11 @@ async def test_save_requires_admin(hass, hass_ws_client, hass_read_only_access_t
     # reading is allowed for everyone
     await client.send_json({"id": 2, "type": "homeplan3d/get"})
     assert (await client.receive_json())["success"]
+
+
+async def test_reload_entry_keeps_panel(hass):
+    entry = await _setup(hass)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert "homeplan3d" in hass.data["frontend_panels"]
+    assert hass.data[DOMAIN]["url"].startswith("/homeplan3d_static/homeplan3d.js?v=0.1.")

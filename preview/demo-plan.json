@@ -76,7 +76,7 @@
     {
      "id": "r2",
      "name": "Küche",
-     "area": null,
+     "area": "kueche",
      "color": "#e0a458",
      "points": [
       [
@@ -263,7 +263,7 @@
     {
      "id": "r4",
      "name": "Schlafen",
-     "area": null,
+     "area": "schlafen",
      "color": "#b388ff",
      "points": [
       [
