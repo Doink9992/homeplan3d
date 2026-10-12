@@ -472,6 +472,7 @@ class HomePlan3DView extends HTMLElement {
       if (obj) selHtml += `<h4>Möbel</h4>${this.formHtml(obj, [
         { k: "type", l: "Typ", t: "select", o: FURN_TYPES }, { k: "name", l: "Name" }, { k: "color", l: "Farbe (leer = Standard)", t: "color" },
         ...(obj.type === "stairs_u" ? [{ k: "landings", l: "Podeste (1 = zwei Läufe, 2 = drei Läufe um die Ecken)", t: "number", s: 1, p: "1" }, { k: "flip", l: "Gespiegelt (Anfang auf der anderen Seite)", t: "checkbox" }] : []),
+        ...(obj.type === "car" ? [{ k: "presence", l: "Anwesenheit (Schalter: an = da, aus = weg)", list: "ents" }] : []),
         ...(obj.type === "car" ? [{ k: "body", l: "Karosserie", t: "select", o: [["", "einfach"], ["sedan", "Limousine"], ["wagon", "Kombi"], ["hatch", "Schrägheck / Crossover"], ["van", "Kastenwagen"], ["roadster", "Roadster"]] }] : []), { k: "rot", l: "Drehung (°)", t: "number", s: 5 },
         { k: "w", l: "Breite", t: "number" }, { k: "d", l: "Tiefe", t: "number" }, { k: "h", l: "Höhe", t: "number" }, { k: "mountY", l: "Höhe über Boden", t: "number", p: "0" },
         { k: "entity", l: "Entität (Zustand/Leuchten)", list: "ents" }, { k: "power", l: "Leistungs-Sensor", list: "ents" },
