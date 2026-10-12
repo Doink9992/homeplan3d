@@ -47,7 +47,7 @@ site      { north, cadastreHouse, buildings[ { id, name, points, height, levels,
                len leer = teilt sich den Rest; doorSide low|high|west|east (Standard low); numberFrom east|west (Standard east)
   openings[]   { type arch|door, x, z, rot (° Wandrichtung), w, h, elev? } Rahmen/Torbogen an einer Gebäudewand
   site.decks[] { name?, points[[x,z]] (Kante 0 liegt an der Hauswand), elev? (Standard 0 = Erdgeschoss), rail?, railSkip? [Kanten ohne Geländer] } Terrassen des Hauses
-  site.gates[] { name, entity, a[x,z], b[x,z], h?, inward? [dx,dz] (Aufschwenken, Standard Osten), openStates?, closedStates? } Doppeltor; Zustand "Auf"/"Zu" z. B. von einer Frigate-Zustandsklassifizierung
+  site.gates[] { name, entity?, single? (ein Flügel = Türchen), barsA?, a[x,z], b[x,z], h?, inward? [dx,dz] (Aufschwenken, Standard Osten), openStates?, closedStates? } Doppeltor; Zustand "Auf"/"Zu" z. B. von einer Frigate-Zustandsklassifizierung
   balconies[]  { name?, points[[x,z]] (Kante 0 liegt an der Wand), elev? (Standard: erstes Geschoss), rail? }
   pv{}         { enabled, fill, rows, cols, orientation, over ("#<Index eines Teils>"), edge, wp, entity }
 ```

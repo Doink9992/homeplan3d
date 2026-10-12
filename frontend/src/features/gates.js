@@ -22,7 +22,7 @@ export class GatesFeature extends Feature {
     const posts = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.3 });
     this.gates = (this.plan.site?.gates || []).filter((g) => g.a && g.b).map((cfg) => {
       const h = cfg.h || 2.0;
-      const len = Math.hypot(cfg.b[0] - cfg.a[0], cfg.b[1] - cfg.a[1]), half = len / 2;
+      const len = Math.hypot(cfg.b[0] - cfg.a[0], cfg.b[1] - cfg.a[1]), half = cfg.single ? len : len / 2; // single: one leaf hung at a (a small door)
       const ang = leafAngles(cfg.a, cfg.b, cfg.inward || [1, 0]);
       const mkLeaf = (hinge, pts, withBars) => {
         const g = new THREE.Group();
@@ -45,7 +45,7 @@ export class GatesFeature extends Feature {
         return g;
       };
       this.pickList = this.pickList || [];
-      const A = mkLeaf(cfg.a, ang.A, false), B = mkLeaf(cfg.b, ang.B, true);
+      const A = mkLeaf(cfg.a, ang.A, !!cfg.barsA), B = cfg.single ? null : mkLeaf(cfg.b, ang.B, true);
       // posts at both ends
       for (const p of [cfg.a, cfg.b]) {
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, h + 0.1, 0.2), posts);
@@ -59,7 +59,7 @@ export class GatesFeature extends Feature {
 
   update(states) {
     this.gates?.forEach((g) => {
-      const s = states[g.cfg.entity];
+      const s = g.cfg.entity ? states[g.cfg.entity] : null; // without an entity the gate just stays shut
       const st = gateState(s?.state, g.cfg);
       if (st) {
         const to = st === "open" ? 1 : 0;
@@ -76,7 +76,7 @@ export class GatesFeature extends Feature {
 
   pose() {
     this.gates?.forEach((g) => {
-      const set = (leaf, a) => { leaf.rotation.y = -(a.closed + (a.open - a.closed) * g.cur); };
+      const set = (leaf, a) => { if (leaf) leaf.rotation.y = -(a.closed + (a.open - a.closed) * g.cur); };
       set(g.A, g.ang.A);
       set(g.B, g.ang.B);
     });
