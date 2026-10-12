@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import polygonClipping from "polygon-clipping";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, stairOpening, isStairs, DEFAULTS } from "./plan.js";
 import { labelPoint, rad, domainOf, inPoly, bbox, furnitureCorners } from "./util.js";
 import { siteFrame, localToPlan, resolveParts, pvGrid, doorSpec, stallCenters, PART_LABELS } from "./lib/site.js";
@@ -55,6 +56,13 @@ function box(w, h, d, y0 = 0, x0 = 0, z0 = 0) {
   const g = new THREE.BoxGeometry(w, h, d);
   g.translate(x0, y0 + h / 2, z0);
   return g;
+}
+
+// 3D models of cars (furniture.model: URL of a GLB, e.g. /local/homeplan3d/sandero.glb), loaded once per URL
+const modelCache = new Map();
+function loadModel(url) {
+  if (!modelCache.has(url)) modelCache.set(url, new Promise((resolve, reject) => new GLTFLoader().load(url, (g) => resolve(g.scene), undefined, reject)));
+  return modelCache.get(url);
 }
 
 // side profiles of car bodies: [position along the length 0 = rear .. 1 = front, height 0 = sill .. 1 = roof]
@@ -176,6 +184,24 @@ function buildFurniture(f, elev, ctx) {
       // body: a side profile of the model's shape (wagon, hatch, van, roadster, sedan) extruded across the width;
       // without `body` the old simple body + cabin. The glow band around the base shows charge level / climate
       const prof = CAR_BODIES[f.body];
+      if (f.model) {
+        // placeholder body now, the real model replaces it when it has loaded (a model that cannot be loaded leaves the placeholder)
+        const pick = ctx.pickables, before = geos.length;
+        loadModel(f.model).then((src) => {
+          const model = src.clone(true);
+          const tint = new THREE.Color(f.color || "#d8dde8");
+          const mm = new THREE.MeshStandardMaterial({ vertexColors: true, color: tint, emissive: tint, emissiveIntensity: ctx.theme === "day" ? 0 : 0.12, roughness: 0.55, metalness: 0.15 });
+          model.traverse((o) => { if (o.isMesh) { o.material = mm; o.userData = { entity: f.entity || null, furnId: f.id }; pick.push(o); } });
+          const box = new THREE.Box3().setFromObject(model), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+          model.position.set(-c.x, -box.min.y, -c.z);
+          const holder = new THREE.Group();
+          holder.add(model);
+          holder.scale.set(w / size.x, h / size.y, d / size.z);
+          holder.rotation.y = rad(f.modelRot || 0);
+          for (const m of geos.splice(before)) { g.remove(m); const i = pick.indexOf(m); if (i >= 0) pick.splice(i, 1); }
+          g.add(holder);
+        }).catch(() => { /* keep the placeholder */ });
+      }
       if (prof) {
         const lo = 0.2, sy = (v) => lo + v * (h - lo);
         const shape = new THREE.Shape(prof.map(([s, y]) => new THREE.Vector2((s - 0.5) * d, sy(y))));
@@ -199,7 +225,7 @@ function buildFurniture(f, elev, ctx) {
       const bandMat = new THREE.MeshBasicMaterial({ color: 0x19e6ff, transparent: true, opacity: 0.9 });
       const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, 0.06, d + 0.08), bandMat);
       band.position.set(0, 0.1, 0);
-      band.visible = !!f.car || !prof; // the charge band only makes sense for a linked vehicle
+      band.visible = !!f.car || (!prof && !f.model); // the charge band only makes sense for a linked vehicle
       g.add(band);
       ctx.anchors.cars.push({ f, band: bandMat, group: g, floor: ctx.cur.i, w, d, h });
       if (f.name && !f.car) {
