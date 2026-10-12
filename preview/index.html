@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>Home Plan 3D – Vorschau</title>
+<body style="margin:0;height:100vh;background:#000">
+<script type="module" src="../custom_components/homeplan3d/www/homeplan3d.js"></script>
+<script type="module">
+// Demo harness without Home Assistant
+const q = new URLSearchParams(location.search);
+// ?plan=../import/plan.json loads your own plan; the default is a small demo house
+let plan = { version: 2, floors: [] };
+try { plan = await (await fetch(q.get("plan") || "demo-plan.json")).json(); } catch {}
+let neon = null; // optional: ?neon=../import/neonplan-raw.json enables the NeonPlan 3D import button
+if (q.get("neon")) try { neon = (await (await fetch(q.get("neon"))).json()).result; } catch {}
+const states = {
+  "light.wohnzimmer": { state: "on", attributes: { friendly_name: "Wohnzimmer", brightness: 200, rgb_color: [255, 160, 60] } },
+  "binary_sensor.haustuer": { state: q.get("door") === "open" ? "on" : "off", attributes: {} },
+  "sensor.pv_power": { state: "310", attributes: { unit_of_measurement: "W" } },
+  "sensor.house_power": { state: "1240", attributes: { unit_of_measurement: "W" } },
+  "switch.stehlampe": { state: "on", attributes: { friendly_name: "Stehlampe" } },
+};
+const hass = {
+  states, user: { is_admin: true }, areas: { wohnzimmer: { area_id: "wohnzimmer", name: "Wohnzimmer" } },
+  entities: { "light.wohnzimmer": { area_id: "wohnzimmer" } }, devices: {},
+  callWS: async (m) => {
+    if (m.type === "homeplan3d/get") return plan;
+    if (m.type === "homeplan3d/save") { plan = m.plan; return { ok: true }; }
+    if (m.type === "neonplan3d/building/get" && neon) return neon;
+    throw new Error("unknown " + m.type);
+  },
+  callService: (d, s, x) => { const e = states[x.entity_id]; if (e) e.state = e.state === "on" ? "off" : "on"; el.hass = { ...hass }; },
+};
+const el = document.createElement(q.get("card") ? "homeplan3d-card" : "homeplan3d-panel");
+if (q.get("card")) el.setConfig({ type: "custom:homeplan3d-card", height: 600 });
+document.body.append(el);
+el.hass = hass;
+window.el = el;
+</script>

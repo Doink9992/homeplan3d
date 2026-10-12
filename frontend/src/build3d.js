@@ -1,0 +1,522 @@
+import * as THREE from "three";
+import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, isStairs, DEFAULTS } from "./plan.js";
+import { labelPoint, rad, domainOf, inPoly, bbox } from "./util.js";
+
+export const THEMES = {
+  neon: { bg: 0x07080f, wall: 0x19e6ff, wallOp: 0.2, edgeOp: 0.85, floorK: 0.25, floorEm: 0.14, door: 0xff2bd6, win: 0x6fa8ff, roof: 0xff9a3c, text: "#dfe8ff", glow: "#19e6ff" },
+  day: { bg: 0xdfe6f2, wall: 0xf2f4f8, wallOp: 0.92, edgeOp: 0.5, floorK: 0.85, floorEm: 0.0, door: 0x9a6b3f, win: 0x8ec5ff, roof: 0xb5543c, text: "#1d2740", glow: "#ffffff" },
+};
+
+// -------------------------------------------------------------- furniture
+const COL = {
+  kitchen: "#ffb347", kitchen_tall: "#ffb347", kitchen_wall: "#ffb347", island: "#ffb347", sink: "#9ad7ff", stove: "#ff6b6b",
+  dishwasher: "#c0c8d8", fridge: "#e8f1ff", washer: "#e8f1ff", dryer: "#e8f1ff", bed: "#b388ff", dresser: "#c08a5a", wardrobe: "#c08a5a",
+  tall_cabinet: "#c08a5a", sideboard: "#c08a5a", shelf: "#c08a5a", desk: "#4aa3ff", office_chair: "#4aa3ff", chair: "#e0b080", stool: "#e0b080",
+  table: "#e0b080", bench: "#e0b080", sofa_l: "#7bd88f", sofa: "#7bd88f", tv_board: "#7bd88f", rug: "#8f6bb3", shower: "#7fdbff", wc: "#e8f1ff",
+  washbasin: "#e8f1ff", bathtub: "#e8f1ff", robot_vacuum: "#00ff9d", led_strip: "#fff29a", inverter: "#ffd166", meter: "#ffd166",
+  grid_point: "#ffd166", stairs: "#c9d1e6", stairs_u: "#c9d1e6",
+};
+const DIM = { stairs: [1, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02] };
+
+export function valueSprite() {
+  const c = document.createElement("canvas");
+  c.width = 256; c.height = 64;
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(1.2, 0.3, 1);
+  sp.renderOrder = 10;
+  sp.visible = false;
+  sp.userData = { canvas: c, tex, text: "" };
+  return sp;
+}
+export function setSprite(sp, text, color = "#19e6ff") {
+  const u = sp.userData;
+  if (u.text === text) return;
+  u.text = text;
+  const x = u.canvas.getContext("2d");
+  x.clearRect(0, 0, 256, 64);
+  x.fillStyle = "rgba(7,8,15,.75)";
+  x.beginPath(); x.roundRect(4, 8, 248, 48, 12); x.fill();
+  x.strokeStyle = color; x.lineWidth = 2; x.stroke();
+  x.fillStyle = "#fff"; x.font = "bold 30px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText(text, 128, 33);
+  u.tex.needsUpdate = true;
+}
+
+function box(w, h, d, y0 = 0, x0 = 0, z0 = 0) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(x0, y0 + h / 2, z0);
+  return g;
+}
+
+function buildFurniture(f, elev, ctx) {
+  const dim = DIM[f.type] || [0.6, 0.6, 0.8];
+  const w = f.w || dim[0], d = f.d || dim[1], h = f.h || dim[2];
+  const col = new THREE.Color(COL[f.type] || "#9aa5c0");
+  const dark = ctx.theme === "day" ? 1 : 0.5;
+  const mat = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(dark), emissive: col, emissiveIntensity: ctx.theme === "day" ? 0 : 0.18, transparent: true, opacity: ctx.theme === "day" ? 1 : 0.88 });
+  const lineMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
+  const y0 = f.mountY ?? (f.type === "kitchen_wall" ? 1.4 : 0);
+  const geos = [];
+  const mats = [mat];
+  const g = new THREE.Group();
+  g.position.set(f.x, elev, f.z);
+  g.rotation.y = -rad(f.rot || 0);
+
+  const add = (geo, m = mat) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), lineMat));
+    g.add(mesh);
+    mesh.userData.entity = f.entity || null;
+    ctx.pickables.push(mesh);
+    geos.push(mesh);
+    return mesh;
+  };
+
+  switch (f.type) {
+    case "stairs":
+    case "stairs_u": {
+      const n = Math.max(4, Math.round(h / 0.18)), sd = d / n;
+      for (let i = 0; i < n; i++) add(box(w, ((i + 1) * h) / n, sd, 0, 0, d / 2 - (i + 0.5) * sd));
+      break;
+    }
+    case "table":
+    case "desk":
+    case "bench": {
+      add(box(w, 0.05, d, h - 0.05));
+      const lx = w / 2 - 0.05, lz = d / 2 - 0.05;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(box(0.05, h - 0.05, 0.05, 0, sx * lx, sz * lz));
+      break;
+    }
+    case "chair":
+    case "office_chair":
+    case "stool": {
+      const seat = Math.min(0.46, h * 0.5);
+      add(box(w, 0.06, d, seat));
+      add(box(0.06, seat, 0.06));
+      if (f.type !== "stool") add(box(w, h - seat, 0.05, seat, 0, -d / 2 + 0.025));
+      break;
+    }
+    case "sofa_l":
+    case "sofa": {
+      add(box(w, Math.min(0.45, h), d));
+      add(box(w, h, 0.22, 0, 0, -d / 2 + 0.11));
+      break;
+    }
+    case "robot_vacuum": {
+      const geo = new THREE.CylinderGeometry(Math.max(w, d) / 2, Math.max(w, d) / 2, h, 24);
+      geo.translate(0, y0 + h / 2, 0);
+      add(geo);
+      break;
+    }
+    default:
+      add(box(w, h, d, y0));
+  }
+
+  const entry = { mats, group: g };
+  const top = y0 + h;
+  if (f.entity || f.stateEntity) {
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    glow.scale.setScalar(Math.max(1, w * 2));
+    glow.position.set(0, top / 2, 0);
+    glow.visible = false;
+    g.add(glow);
+    ctx.dyn.push({ kind: "furniture", entity: f.entity || f.stateEntity, mats, glow, baseScale: glow.scale.x });
+  }
+  if (f.power) {
+    const sp = valueSprite();
+    sp.position.set(0, top + 0.35, 0);
+    g.add(sp);
+    ctx.dyn.push({ kind: "value", entity: f.power, sprite: sp, always: f.marker === "always" });
+  }
+  if (f.name && f.showName) {
+    const sp = valueSprite();
+    setSprite(sp, f.name, "#19e6ff");
+    sp.visible = true;
+    sp.position.set(0, top + 0.3, 0);
+    g.add(sp);
+  }
+  return entry.group;
+}
+
+// -------------------------------------------------------------- walls
+function wallMesh(seg, floor, elev, plan, th, mats, ops) {
+  const L = seg.len + seg.extA + seg.extB;
+  const dx = (seg.b[0] - seg.a[0]) / seg.len, dz = (seg.b[1] - seg.a[1]) / seg.len;
+  const maxH = seg.h != null ? Math.min(seg.h, floor.height) : floor.height;
+  const hasRoof = roofSections(plan).length > 0;
+  const topAt = (u) => {
+    if (!hasRoof) return maxH;
+    const dd = u - seg.extA;
+    const ry = roofHeightAt(plan, seg.a[0] + dx * dd, seg.a[1] + dz * dd);
+    return ry === Infinity ? maxH : Math.max(0.05, Math.min(maxH, ry - elev - 0.02));
+  };
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0);
+  sh.lineTo(L, 0);
+  const n = hasRoof ? Math.max(1, Math.ceil(L / 0.25)) : 1;
+  for (let k = n; k >= 0; k--) {
+    const u = (L * k) / n;
+    sh.lineTo(u, topAt(u));
+  }
+  sh.closePath();
+
+  const holes = ops
+    .map((o) => ({ u0: o.u + seg.extA - o.w / 2, u1: o.u + seg.extA + o.w / 2, y0: Math.max(o.sill, 0.003), y1: o.sill + o.h }))
+    .sort((a, b) => a.u0 - b.u0);
+  let lastU = -1;
+  holes.forEach((hl) => {
+    const u0 = Math.max(hl.u0, 0.01), u1 = Math.min(hl.u1, L - 0.01);
+    const y1 = Math.min(hl.y1, Math.min(topAt(u0), topAt(u1)) - 0.01);
+    if (u1 - u0 < 0.05 || y1 - hl.y0 < 0.05 || u0 < lastU + 0.01) return;
+    lastU = u1;
+    const p = new THREE.Path();
+    p.moveTo(u0, hl.y0); p.lineTo(u1, hl.y0); p.lineTo(u1, y1); p.lineTo(u0, y1); p.closePath();
+    sh.holes.push(p);
+  });
+
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: seg.t, bevelEnabled: false, curveSegments: 1 });
+  geo.translate(0, 0, -seg.t / 2);
+  const mesh = new THREE.Mesh(geo, mats.wall);
+  mesh.position.set(seg.a[0] - dx * seg.extA, elev, seg.a[1] - dz * seg.extA);
+  mesh.rotation.y = seg.rot;
+  mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), mats.edge));
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
+// -------------------------------------------------------------- openings
+function buildOpening(o, seg, elev, ctx, plan) {
+  const th = ctx.th;
+  const door = o.type === "door";
+  const g = new THREE.Group();
+  const dx = seg ? (seg.s.b[0] - seg.s.a[0]) / seg.s.len : Math.cos(-o.rot);
+  const dz = seg ? (seg.s.b[1] - seg.s.a[1]) / seg.s.len : Math.sin(-o.rot);
+  const px = seg ? seg.s.a[0] + dx * seg.u : o.x, pz = seg ? seg.s.a[1] + dz * seg.u : o.z;
+  g.position.set(px, elev + o.sill, pz);
+  g.rotation.y = seg ? seg.s.rot : o.rot;
+  const t = seg ? seg.s.t : 0.15;
+  const w = o.w, h = Math.min(o.h, 3);
+  const col = door ? (o.style === "front" ? 0xff2bd6 : th.door) : th.win;
+  const lineMat = new THREE.LineBasicMaterial({ color: col });
+
+  // frame
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, t + 0.02)), lineMat);
+  frame.position.y = h / 2;
+  g.add(frame);
+
+  const entry = { kind: "opening", entity: o.entity || null, type: o.type, open: 0 };
+  if (door && o.style === "passage") {
+    ctx.dyn.push(entry);
+    return g;
+  }
+  const pivot = new THREE.Group();
+  const hingeX = o.hinge === "right" ? w / 2 : -w / 2;
+  pivot.position.set(hingeX, 0, 0);
+  const sign = (o.hinge === "right" ? -1 : 1) * (o.swing === "out" ? -1 : 1);
+  const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: door ? 0.5 : 0.7, transparent: true, opacity: door ? 0.75 : 0.35, depthWrite: false, side: THREE.DoubleSide });
+  const leafW = door || o.leaves !== 2 ? w : w / 2;
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW - 0.04, h - 0.04, door ? 0.045 : 0.02), mat);
+  leaf.position.set(-hingeX > 0 ? leafW / 2 : -leafW / 2, h / 2, 0);
+  pivot.add(leaf);
+  if (!door && o.leaves === 2) {
+    const l2 = new THREE.Mesh(leaf.geometry, mat);
+    l2.position.set(-leaf.position.x, h / 2, 0);
+    g.add(l2);
+  }
+  g.add(pivot);
+  entry.pivot = pivot;
+  entry.mat = mat;
+  entry.sign = sign;
+  entry.maxAngle = door ? rad(75) : rad(28);
+  ctx.dyn.push(entry);
+  return g;
+}
+
+// -------------------------------------------------------------- roof
+function mapC(g, c, y, s) {
+  return g.horiz ? [s, y, c] : [c, y, s];
+}
+
+/** Roof surface + gable walls of one section, added to `group`. */
+function addRoofSection(group, s, m, depth = 0.5) {
+  const g = roofGeom(s);
+  const o = s.overhang ?? g.overhang;
+  const sa = g.s0 - o, sb = g.s1 + o;
+  const cA = g.c0 - o, cB = g.c1 + o;
+  const yA = g.eaveA - g.ta * o, yB = g.eaveB - g.tb * o;
+  const v = [mapC(g, cA, yA, sa), mapC(g, cA, yA, sb), mapC(g, g.cr, g.yr, sb), mapC(g, g.cr, g.yr, sa), mapC(g, cB, yB, sa), mapC(g, cB, yB, sb)];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(v.flat(), 3));
+  geo.setIndex([0, 1, 2, 0, 2, 3, 3, 2, 5, 3, 5, 4]);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, m.surf);
+  mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 5), m.line));
+  mesh.renderOrder = 2;
+  group.add(mesh);
+
+  // gable walls from the wall top (base) up to the roof line
+  for (const [s0, dir] of [[g.s0, 1], [g.s1, -1]]) {
+    const sh = new THREE.Shape();
+    sh.moveTo(g.c0, g.base); sh.lineTo(g.c1, g.base); sh.lineTo(g.c1, Math.max(g.eaveB, g.base)); sh.lineTo(g.cr, g.yr); sh.lineTo(g.c0, Math.max(g.eaveA, g.base)); sh.closePath();
+    const gg = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false });
+    const mm = new THREE.Matrix4();
+    if (g.horiz) mm.set(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1); // (x,y,z) -> (z,y,x)
+    gg.applyMatrix4(mm);
+    const shift = dir > 0 ? s0 : s0 - depth;
+    if (g.horiz) gg.translate(shift, 0, 0); else gg.translate(0, 0, shift);
+    const gm = new THREE.Mesh(gg, m.gable);
+    gm.add(new THREE.LineSegments(new THREE.EdgesGeometry(gg, 25), m.edge));
+    group.add(gm);
+  }
+}
+
+export function buildRoof(plan, ctx) {
+  const roof = plan.settings?.roof;
+  const group = new THREE.Group();
+  if (!roof?.sections?.length) return group;
+  const th = ctx.th;
+  const surf = new THREE.MeshStandardMaterial({ color: th.roof, emissive: th.roof, emissiveIntensity: ctx.theme === "day" ? 0 : 0.25, transparent: true, opacity: ctx.theme === "day" ? 0.95 : 0.3, side: THREE.DoubleSide, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({ color: th.roof, transparent: true, opacity: 0.9 });
+  const gableMat = new THREE.MeshStandardMaterial({ color: th.wall, emissive: th.wall, emissiveIntensity: 0.2, transparent: true, opacity: th.wallOp + 0.05, side: THREE.DoubleSide, depthWrite: false });
+
+  roof.sections.forEach((s) => addRoofSection(group, s, { surf, line: lineMat, gable: gableMat, edge: ctx.mats.edge }));
+
+  const secOf = (face) => {
+    const [id, side] = String(face).split(":");
+    const s = roof.sections.find((x) => x.id === id);
+    return s ? { g: roofGeom(s), side: side === "b" ? "b" : "a" } : null;
+  };
+  const place = (face, u, v, lift, w, len) => {
+    const r = secOf(face);
+    if (!r) return null;
+    const { g, side } = r;
+    const t = rad(side === "a" ? g.pa : g.pb);
+    let c = side === "a" ? g.c0 + v * Math.cos(t) : g.c1 - v * Math.cos(t);
+    let y = (side === "a" ? g.eaveA : g.eaveB) + v * Math.sin(t);
+    c += (side === "a" ? -Math.sin(t) : Math.sin(t)) * lift;
+    y += Math.cos(t) * lift;
+    const pos = mapC(g, c, y, g.s0 + u);
+    const geo = g.horiz ? new THREE.BoxGeometry(w, 0.04, len) : new THREE.BoxGeometry(len, 0.04, w);
+    const m = new THREE.Mesh(geo, null);
+    m.position.set(...pos);
+    if (g.horiz) m.rotation.x = side === "a" ? -t : t;
+    else m.rotation.z = side === "a" ? t : -t;
+    return m;
+  };
+
+  (roof.solar || []).forEach((p) => {
+    const mw = p.moduleW || (p.portrait ? 1.134 : 1.722), mh = p.moduleH || (p.portrait ? 1.722 : 1.134);
+    const cols = p.cols || 1, rows = p.rows || 1;
+    const mat = new THREE.MeshStandardMaterial({ color: 0x0b1530, emissive: 0x1f6bff, emissiveIntensity: 0.15, metalness: 0.4, roughness: 0.3 });
+    const line = new THREE.LineBasicMaterial({ color: 0x5aa0ff });
+    for (let i = 0; i < cols; i++)
+      for (let j = 0; j < rows; j++) {
+        const u = p.u + (i - (cols - 1) / 2) * (mw + 0.02);
+        const v = p.v + (j - (rows - 1) / 2) * (mh + 0.02);
+        const m = place(p.face, u, v, 0.05, mw, mh);
+        if (!m) continue;
+        m.material = mat;
+        m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), line));
+        group.add(m);
+      }
+    if (p.entity) ctx.dyn.push({ kind: "solar", entity: p.entity, mat, wp: p.wp || 400 });
+  });
+  (roof.windows || []).forEach((w) => {
+    const m = place(w.face, w.u, w.v, 0.05, w.w || 1, w.h || 1.2);
+    if (!m) return;
+    m.material = new THREE.MeshStandardMaterial({ color: th.win, emissive: th.win, emissiveIntensity: 0.5, transparent: true, opacity: 0.55 });
+    group.add(m);
+  });
+  return group;
+}
+
+// -------------------------------------------------------------- site (other buildings on the parcel)
+export function buildSite(plan, ctx, opts = {}) {
+  const group = new THREE.Group();
+  const buildings = plan.site?.buildings || [];
+  if (!buildings.length) return group;
+  const day = ctx.theme === "day";
+  const col = day ? 0xd8c3a5 : 0xffb347;
+  const wallMat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.18, transparent: true, opacity: day ? 0.95 : 0.22, depthWrite: false, side: THREE.DoubleSide });
+  const lineMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
+  const roofMats = {
+    surf: new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.25, transparent: true, opacity: day ? 0.95 : 0.32, side: THREE.DoubleSide, depthWrite: false }),
+    line: lineMat, gable: wallMat, edge: lineMat,
+  };
+  buildings.forEach((b) => {
+    if (b.visible === false || !b.points || b.points.length < 3) return;
+    const h = b.height || 3;
+    const geo = new THREE.ExtrudeGeometry(new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: h, bevelEnabled: false, curveSegments: 1 });
+    const prism = new THREE.Mesh(geo, wallMat);
+    prism.rotation.x = -Math.PI / 2; // shape (x,-z) -> world (x, up, z)
+    prism.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), lineMat));
+    prism.userData = { site: b.id };
+    prism.renderOrder = 1;
+    group.add(prism);
+    ctx.pickables.push(prism);
+
+    // intermediate floors (storeys above ground level): translucent slab + outline
+    (b.storeys || []).filter((e) => e > 0.05 && e < h - 0.3).forEach((e) => {
+      const slab = new THREE.ExtrudeGeometry(new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
+      const sm = new THREE.Mesh(slab, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.35, transparent: true, opacity: day ? 0.9 : 0.45, side: THREE.DoubleSide, depthWrite: false }));
+      sm.rotation.x = -Math.PI / 2;
+      sm.position.y = e - 0.18;
+      sm.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab, 25), lineMat));
+      group.add(sm);
+    });
+
+    let top = h;
+    const roof = b.roof || {};
+    if (roof.type === "gable" && b.points.length === 4) {
+      const [p0, p1, p2] = b.points;
+      const e0 = [p1[0] - p0[0], p1[1] - p0[1]], e1 = [p2[0] - p1[0], p2[1] - p1[1]];
+      const l0 = Math.hypot(...e0), l1 = Math.hypot(...e1);
+      const ridge = l0 >= l1 ? e0 : e1;
+      const len = Math.max(l0, l1), wid = Math.min(l0, l1);
+      const pitch = roof.pitch || 25;
+      const sec = { axis: "x", x0: -len / 2, x1: len / 2, z0: -wid / 2, z1: wid / 2, base: h, eaveA: h, eaveB: h, pitchA: pitch, pitchB: pitch, overhang: roof.overhang ?? 0.3 };
+      const rg = new THREE.Group();
+      addRoofSection(rg, sec, roofMats, 0.05);
+      rg.position.set(b.points.reduce((a, p) => a + p[0], 0) / b.points.length, 0, b.points.reduce((a, p) => a + p[1], 0) / b.points.length);
+      rg.rotation.y = -Math.atan2(ridge[1], ridge[0]);
+      group.add(rg);
+      top = roofGeom(sec).yr;
+    }
+    if (b.name && opts.label) {
+      const lp = labelPoint(b.points);
+      const sp = opts.label(b.name, ctx.theme);
+      sp.position.set(lp[0], top + 0.1, lp[1]);
+      group.add(sp);
+    }
+  });
+  return group;
+}
+
+export function buildCompass(north, pos, ctx) {
+  const g = new THREE.Group();
+  g.position.set(pos[0], 0.05, pos[1]);
+  const n = rad(north || 0);
+  const dir = new THREE.Vector3(Math.sin(n), 0, -Math.cos(n));
+  const col = ctx.theme === "day" ? 0x334155 : 0x19e6ff;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.18, 48), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
+  ring.rotation.x = -Math.PI / 2;
+  g.add(ring);
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([dir.clone().multiplyScalar(-0.9), dir.clone().multiplyScalar(1.5)]), new THREE.LineBasicMaterial({ color: 0xff2bd6 })));
+  const sp = valueSprite();
+  setSprite(sp, "N", "#ff2bd6");
+  sp.visible = true;
+  sp.scale.set(0.9, 0.22, 1);
+  sp.position.copy(dir.clone().multiplyScalar(1.9));
+  sp.position.y = 0.3;
+  g.add(sp);
+  return g;
+}
+
+// -------------------------------------------------------------- building
+/**
+ * Build the whole building as THREE objects.
+ * opts: { theme, maxFloor, devicesFor(floor) -> device list, glowTex(), label(text), showRoof }
+ */
+export function buildBuilding(plan, opts) {
+  const theme = opts.theme || "neon";
+  const th = THEMES[theme] || THEMES.neon;
+  const mats = {
+    wall: new THREE.MeshStandardMaterial({ color: th.wall, emissive: th.wall, emissiveIntensity: theme === "day" ? 0 : 0.25, transparent: true, opacity: th.wallOp, depthWrite: false }),
+    edge: new THREE.LineBasicMaterial({ color: theme === "day" ? 0x667085 : th.wall, transparent: true, opacity: th.edgeOp }),
+  };
+  const ctx = { theme, th, mats, dyn: [], pickables: [], glowTex: opts.glowTex };
+  const root = new THREE.Group();
+  const st = { ...DEFAULTS, ...(plan.settings || {}) };
+
+  plan.floors.forEach((fl, i) => {
+    if (i > opts.maxFloor) return;
+    const elev = elevation(plan, i);
+    const g = new THREE.Group();
+    const dim = i < opts.maxFloor && opts.maxFloor !== Infinity ? 0.7 : 1;
+
+    // floors + slabs
+    const holes = stairHoles(plan, i);
+    fl.rooms.forEach((r) => {
+      const shape = new THREE.Shape(r.points.map((p) => new THREE.Vector2(p[0], p[1])));
+      holes.forEach((h) => {
+        if (h.every((p) => inPoly(p, r.points))) shape.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(p[0], p[1]))));
+      });
+      const c = new THREE.Color(r.color || "#19e6ff");
+      const mat = new THREE.MeshStandardMaterial({ color: c.clone().multiplyScalar(th.floorK), emissive: c, emissiveIntensity: th.floorEm * dim, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: st.slab, bevelEnabled: false, curveSegments: 1 }), mat);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.position.y = 0;
+      mesh.userData = { room: r.id, floor: fl.id };
+      g.add(mesh);
+      ctx.pickables.push(mesh);
+      if (r.name) {
+        const lp = labelPoint(r.points);
+        const sp = opts.label(r.name, theme);
+        sp.position.set(lp[0], 0.04, lp[1]);
+        g.add(sp);
+      }
+    });
+
+    // walls + openings
+    const segs = wallNetwork(fl, st);
+    const hosted = new Map();
+    const free = [];
+    fl.openings.forEach((o) => {
+      const hs = hostSegment(o, segs);
+      if (hs) {
+        if (!hosted.has(hs.s)) hosted.set(hs.s, []);
+        hosted.get(hs.s).push({ ...o, u: hs.u });
+      }
+      g.add(buildOpening(o, hs, 0, ctx, plan));
+      if (!hs) free.push(o);
+    });
+    segs.forEach((s) => {
+      const m = wallMesh(s, fl, elev, plan, th, mats, hosted.get(s) || []);
+      m.position.y = 0;
+      g.add(m);
+    });
+
+    // furniture
+    fl.furniture.forEach((f) => g.add(buildFurniture(f, 0, ctx)));
+
+    // devices
+    opts.devicesFor(fl).forEach((d) => {
+      const dom = domainOf(d.entity);
+      const y = d.y ?? (dom === "light" ? fl.height - 0.4 : 0.9);
+      const geo = dom === "light" ? new THREE.SphereGeometry(0.14, 16, 12) : dom === "cover" ? new THREE.BoxGeometry(0.5, 0.08, 0.08) : new THREE.BoxGeometry(0.22, 0.22, 0.22);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x444a66, emissive: 0x000000 }));
+      mesh.position.set(d.x, y, d.z);
+      mesh.userData = { entity: d.entity };
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: opts.glowTex(), color: 0xffd08a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.copy(mesh.position);
+      const bs = dom === "light" ? 2.4 : 1.1;
+      glow.scale.setScalar(bs);
+      glow.visible = false;
+      g.add(mesh, glow);
+      ctx.pickables.push(mesh);
+      ctx.dyn.push({ kind: dom, entity: d.entity, mesh, glow, baseScale: bs, pulse: dom === "light" });
+      if (d.name && d.showName) {
+        const sp = valueSprite();
+        setSprite(sp, d.name);
+        sp.visible = true;
+        sp.position.set(d.x, y + 0.35, d.z);
+        g.add(sp);
+      }
+    });
+
+    g.position.y = elev;
+    root.add(g);
+  });
+
+  if (opts.showRoof && opts.maxFloor >= plan.floors.length - 1) root.add(buildRoof(plan, ctx));
+  if (opts.showSite !== false) root.add(buildSite(plan, ctx, opts));
+
+  // compass in the south-west corner of everything that is drawn
+  const all = [...plan.floors.flatMap((f) => f.rooms.flatMap((r) => r.points)), ...(plan.site?.buildings || []).flatMap((b) => b.points)];
+  if (all.length && plan.site?.north != null) {
+    const [x0, , , z1] = bbox(all);
+    root.add(buildCompass(plan.site.north, [x0 - 2.5, z1 + 2.5], ctx));
+  }
+  return { root, dyn: ctx.dyn, pickables: ctx.pickables };
+}

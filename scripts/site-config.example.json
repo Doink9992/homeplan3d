@@ -1,0 +1,6 @@
+{
+  "buildings": [
+    {"seed": [338, 223], "id": "garage", "name": "Garage", "height": 3.0, "levels": 1, "roof": "gable", "pitch": 25},
+    {"seed": [672, 237], "id": "scheune", "name": "Scheune", "height": 7.0, "roof": "gable", "pitch": 30}
+  ]
+}

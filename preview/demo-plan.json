@@ -1,0 +1,464 @@
+{
+ "version": 2,
+ "settings": {
+  "wallExterior": 0.3,
+  "wallInterior": 0.12,
+  "slab": 0.18,
+  "autoDevices": true,
+  "north": 20,
+  "roof": {
+   "overhang": 0.5,
+   "sections": [
+    {
+     "id": "roof_main",
+     "shape": "gable",
+     "axis": "x",
+     "x0": -0.2,
+     "x1": 9.2,
+     "z0": -0.2,
+     "z1": 7.2,
+     "base": 5.4,
+     "eaveA": 5.4,
+     "eaveB": 5.4,
+     "pitchA": 35,
+     "pitchB": 35,
+     "overhang": 0.5,
+     "flip": false
+    }
+   ],
+   "solar": [
+    {
+     "id": "pv1",
+     "face": "roof_main:b",
+     "u": 4.5,
+     "v": 2.2,
+     "rows": 1,
+     "cols": 3,
+     "portrait": true,
+     "entity": "sensor.pv_power",
+     "wp": 420
+    }
+   ],
+   "windows": []
+  }
+ },
+ "floors": [
+  {
+   "id": "eg",
+   "name": "EG",
+   "elevation": 0,
+   "height": 2.6,
+   "rooms": [
+    {
+     "id": "r1",
+     "name": "Wohnen",
+     "area": "wohnzimmer",
+     "color": "#e0a458",
+     "points": [
+      [
+       0,
+       0
+      ],
+      [
+       5.5,
+       0
+      ],
+      [
+       5.5,
+       4.5
+      ],
+      [
+       0,
+       4.5
+      ]
+     ]
+    },
+    {
+     "id": "r2",
+     "name": "Küche",
+     "area": null,
+     "color": "#e0a458",
+     "points": [
+      [
+       5.5,
+       0
+      ],
+      [
+       9,
+       0
+      ],
+      [
+       9,
+       4.5
+      ],
+      [
+       5.5,
+       4.5
+      ]
+     ]
+    },
+    {
+     "id": "r3",
+     "name": "Flur",
+     "area": null,
+     "color": "#58c4dd",
+     "points": [
+      [
+       0,
+       4.5
+      ],
+      [
+       9,
+       4.5
+      ],
+      [
+       9,
+       7
+      ],
+      [
+       0,
+       7
+      ]
+     ]
+    }
+   ],
+   "walls": [],
+   "openings": [
+    {
+     "id": "d1",
+     "type": "door",
+     "x": 4.2,
+     "z": 7,
+     "rot": 0,
+     "w": 1.0,
+     "h": 2.1,
+     "sill": 0,
+     "hinge": "left",
+     "swing": "in",
+     "style": "front"
+    },
+    {
+     "id": "w1",
+     "type": "window",
+     "x": 2.0,
+     "z": 0,
+     "rot": 0,
+     "w": 1.6,
+     "h": 1.3,
+     "sill": 0.9,
+     "hinge": "left",
+     "swing": "in"
+    },
+    {
+     "id": "w2",
+     "type": "window",
+     "x": 7.2,
+     "z": 0,
+     "rot": 0,
+     "w": 1.2,
+     "h": 1.3,
+     "sill": 0.9,
+     "hinge": "left",
+     "swing": "in"
+    },
+    {
+     "id": "w3",
+     "type": "window",
+     "x": 0,
+     "z": 2.2,
+     "rot": -1.5708,
+     "w": 1.4,
+     "h": 1.3,
+     "sill": 0.9,
+     "hinge": "left",
+     "swing": "in"
+    },
+    {
+     "id": "d2",
+     "type": "door",
+     "x": 5.5,
+     "z": 2.0,
+     "rot": -1.5708,
+     "w": 0.9,
+     "h": 2.05,
+     "sill": 0,
+     "hinge": "left",
+     "swing": "in",
+     "style": "interior"
+    },
+    {
+     "id": "d3",
+     "type": "door",
+     "x": 2.0,
+     "z": 4.5,
+     "rot": 0,
+     "w": 0.9,
+     "h": 2.05,
+     "sill": 0,
+     "hinge": "left",
+     "swing": "in",
+     "style": "interior"
+    }
+   ],
+   "furniture": [
+    {
+     "id": "f1",
+     "type": "sofa_l",
+     "x": 2.5,
+     "z": 3.2,
+     "rot": 0,
+     "w": 2.4,
+     "d": 1.0,
+     "h": 0.85
+    },
+    {
+     "id": "f2",
+     "type": "table",
+     "x": 2.5,
+     "z": 1.6,
+     "rot": 0,
+     "w": 1.6,
+     "d": 0.9,
+     "h": 0.75
+    },
+    {
+     "id": "f3",
+     "type": "kitchen",
+     "x": 7.2,
+     "z": 0.4,
+     "rot": 0,
+     "w": 3.0,
+     "d": 0.62,
+     "h": 0.9
+    },
+    {
+     "id": "f4",
+     "type": "stairs",
+     "x": 8.2,
+     "z": 5.7,
+     "rot": 0,
+     "w": 0.9,
+     "d": 2.4,
+     "h": 2.78
+    }
+   ],
+   "devices": [
+    {
+     "id": "dv1",
+     "entity": "light.wohnzimmer",
+     "x": 2.7,
+     "z": 2.4,
+     "y": null,
+     "name": null,
+     "showName": false
+    }
+   ]
+  },
+  {
+   "id": "og",
+   "name": "OG",
+   "elevation": 2.78,
+   "height": 2.6,
+   "rooms": [
+    {
+     "id": "r4",
+     "name": "Schlafen",
+     "area": null,
+     "color": "#b388ff",
+     "points": [
+      [
+       0,
+       0
+      ],
+      [
+       4.5,
+       0
+      ],
+      [
+       4.5,
+       7
+      ],
+      [
+       0,
+       7
+      ]
+     ]
+    },
+    {
+     "id": "r5",
+     "name": "Kind",
+     "area": null,
+     "color": "#7bd88f",
+     "points": [
+      [
+       4.5,
+       0
+      ],
+      [
+       9,
+       0
+      ],
+      [
+       9,
+       4
+      ],
+      [
+       4.5,
+       4
+      ]
+     ]
+    },
+    {
+     "id": "r6",
+     "name": "Bad",
+     "area": null,
+     "color": "#58c4dd",
+     "points": [
+      [
+       4.5,
+       4
+      ],
+      [
+       9,
+       4
+      ],
+      [
+       9,
+       7
+      ],
+      [
+       4.5,
+       7
+      ]
+     ]
+    }
+   ],
+   "walls": [],
+   "openings": [
+    {
+     "id": "w4",
+     "type": "window",
+     "x": 2.0,
+     "z": 0,
+     "rot": 0,
+     "w": 1.4,
+     "h": 1.3,
+     "sill": 0.9,
+     "hinge": "left",
+     "swing": "in"
+    },
+    {
+     "id": "w5",
+     "type": "window",
+     "x": 7.0,
+     "z": 0,
+     "rot": 0,
+     "w": 1.2,
+     "h": 1.3,
+     "sill": 0.9,
+     "hinge": "left",
+     "swing": "in"
+    },
+    {
+     "id": "d4",
+     "type": "door",
+     "x": 4.5,
+     "z": 5.5,
+     "rot": -1.5708,
+     "w": 0.9,
+     "h": 2.05,
+     "sill": 0,
+     "hinge": "left",
+     "swing": "in",
+     "style": "interior"
+    }
+   ],
+   "furniture": [
+    {
+     "id": "f5",
+     "type": "bed",
+     "x": 2.2,
+     "z": 1.6,
+     "rot": 90,
+     "w": 1.8,
+     "d": 2.0,
+     "h": 0.5
+    },
+    {
+     "id": "f6",
+     "type": "bathtub",
+     "x": 7.8,
+     "z": 6.3,
+     "rot": 0,
+     "w": 1.7,
+     "d": 0.75,
+     "h": 0.55
+    }
+   ],
+   "devices": []
+  }
+ ],
+ "site": {
+  "north": 20,
+  "buildings": [
+   {
+    "id": "garage",
+    "name": "Garage",
+    "visible": true,
+    "points": [
+     [
+      9.3,
+      0.5
+     ],
+     [
+      13.5,
+      0.5
+     ],
+     [
+      13.5,
+      6.5
+     ],
+     [
+      9.3,
+      6.5
+     ]
+    ],
+    "height": 3.0,
+    "roof": {
+     "type": "gable",
+     "pitch": 22,
+     "overhang": 0.3
+    }
+   },
+   {
+    "id": "carport",
+    "name": "Carport",
+    "visible": true,
+    "points": [
+     [
+      -6,
+      1
+     ],
+     [
+      -1.2,
+      1
+     ],
+     [
+      -1.2,
+      6
+     ],
+     [
+      -6,
+      6
+     ]
+    ],
+    "height": 2.5,
+    "roof": {
+     "type": "flat",
+     "pitch": 0,
+     "overhang": 0
+    }
+   }
+  ]
+ }
+}

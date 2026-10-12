@@ -1,0 +1,6 @@
+node_modules/
+# personal data (exported building plan, screenshots, generated site files)
+import/
+__pycache__/
+.pytest_cache/
+*.pyc
