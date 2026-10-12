@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import polygonClipping from "polygon-clipping";
 import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, stairOpening, isStairs, DEFAULTS } from "./plan.js";
 import { labelPoint, rad, domainOf, inPoly, bbox, furnitureCorners } from "./util.js";
 import { siteFrame, localToPlan, resolveParts, pvGrid, doorSpec, stallCenters, PART_LABELS } from "./lib/site.js";
@@ -651,22 +652,33 @@ export function buildSite(plan, ctx, opts = {}) {
 
     // intermediate floors (storeys above ground level): translucent slab + outline
     (b.storeys || []).filter((e) => e > 0.05 && e < h - 0.3).forEach((e) => {
-      const slabShape = new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1])));
-      // stairs from the house floors below that end inside this building open the slab
+      // openings of the slab: stairs from the house floors below that end inside this building ...
+      const holes = [];
       plan.floors.forEach((fl2, k) => {
         const base = elevation(plan, k);
         if (base >= e) return;
         fl2.furniture.filter(isStairs).forEach((s) => {
           const poly = stairOpening(s);
-          if (base + (s.h || 2.7) >= e - 0.35 && poly.every((p) => inPoly(p, b.points))) slabShape.holes.push(new THREE.Path(poly.map((p) => new THREE.Vector2(p[0], -p[1]))));
+          if (base + (s.h || 2.7) >= e - 0.35 && poly.every((p) => inPoly(p, b.points))) holes.push(poly);
         });
       });
-      // rooms of a house floor on this level with a lower floor (room.dy < 0) have their own floor: no storey slab there
+      // ... and rooms of a house floor on this level with a lower floor (room.dy < 0), which have their own floor
       plan.floors.forEach((fl2, k) => {
         if (Math.abs(elevation(plan, k) - e) > 0.02) return;
-        fl2.rooms.filter((r) => r.dy < 0 && r.points.every((p) => inPoly(p, b.points))).forEach((r) => slabShape.holes.push(new THREE.Path(r.points.map((p) => new THREE.Vector2(p[0], -p[1])))));
+        fl2.rooms.filter((r) => r.dy < 0 && r.points.every((p) => inPoly(p, b.points))).forEach((r) => holes.push(r.points));
       });
-      const slab = new THREE.ExtrudeGeometry(slabShape, { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
+      // openings that touch or overlap become one (no thin strips of slab in between)
+      const toShape = (ring, hs = []) => {
+        const s = new THREE.Shape(ring.map((p) => new THREE.Vector2(p[0], -p[1])));
+        hs.forEach((h) => s.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(p[0], -p[1])))));
+        return s;
+      };
+      let slabShapes = [toShape(b.points)];
+      if (holes.length) {
+        const cut = polygonClipping.difference([[b.points.map((p) => [p[0], p[1]])]], ...holes.map((h) => [[h.map((p) => [p[0], p[1]])]]));
+        slabShapes = cut.map((poly) => toShape(poly[0], poly.slice(1)));
+      }
+      const slab = new THREE.ExtrudeGeometry(slabShapes, { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
       const sm = new THREE.Mesh(slab, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.35, transparent: true, opacity: day ? 0.9 : 0.45, side: THREE.DoubleSide, depthWrite: false }));
       sm.rotation.x = -Math.PI / 2;
       sm.position.y = e - 0.18;
