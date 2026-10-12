@@ -56,6 +56,15 @@ function box(w, h, d, y0 = 0, x0 = 0, z0 = 0) {
   return g;
 }
 
+// side profiles of car bodies: [position along the length 0 = rear .. 1 = front, height 0 = sill .. 1 = roof]
+const CAR_BODIES = {
+  sedan: [[0, 0], [0, 0.42], [0.08, 0.5], [0.3, 0.55], [0.4, 1], [0.64, 1], [0.78, 0.58], [1, 0.5], [1, 0]],
+  wagon: [[0, 0], [0, 0.78], [0.03, 0.97], [0.08, 1], [0.58, 1], [0.8, 0.58], [1, 0.5], [1, 0]],
+  hatch: [[0, 0], [0, 0.72], [0.06, 0.96], [0.12, 1], [0.54, 1], [0.76, 0.64], [1, 0.54], [1, 0]],
+  van: [[0, 0], [0, 0.95], [0.03, 1], [0.72, 1], [0.86, 0.66], [1, 0.58], [1, 0]],
+  roadster: [[0, 0], [0, 0.55], [0.12, 0.62], [0.5, 0.62], [0.58, 1], [0.7, 1], [0.8, 0.64], [1, 0.52], [1, 0]],
+};
+
 function buildFurniture(f, elev, ctx) {
   const dim = DIM[f.type] || [0.6, 0.6, 0.8];
   const w = f.w || dim[0], d = f.d || dim[1], h = f.h || dim[2];
@@ -137,12 +146,33 @@ function buildFurniture(f, elev, ctx) {
       break;
     }
     case "car": {
-      // simple body + cabin; the glow band around the base shows charge level / climate
-      add(box(w, h * 0.42, d, 0.18));
-      add(box(w * 0.86, h * 0.34, d * 0.5, 0.18 + h * 0.42, 0, -d * 0.04));
+      // body: a side profile of the model's shape (wagon, hatch, van, roadster, sedan) extruded across the width;
+      // without `body` the old simple body + cabin. The glow band around the base shows charge level / climate
+      const prof = CAR_BODIES[f.body];
+      if (prof) {
+        const lo = 0.2, sy = (v) => lo + v * (h - lo);
+        const shape = new THREE.Shape(prof.map(([s, y]) => new THREE.Vector2((s - 0.5) * d, sy(y))));
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: false });
+        geo.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1)); // (x,y,z) -> (z,y,x)
+        geo.translate(-w / 2, 0, 0);
+        add(geo);
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111418, emissive: 0x20242c, emissiveIntensity: 0.5 });
+        const r = Math.min(0.34, h * 0.27);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+          const wg = new THREE.CylinderGeometry(r, r, 0.22, 16);
+          wg.rotateZ(Math.PI / 2);
+          const wm = new THREE.Mesh(wg, wheelMat);
+          wm.position.set(sx * (w / 2 - 0.1), r, sz * d * 0.31);
+          g.add(wm);
+        }
+      } else {
+        add(box(w, h * 0.42, d, 0.18));
+        add(box(w * 0.86, h * 0.34, d * 0.5, 0.18 + h * 0.42, 0, -d * 0.04));
+      }
       const bandMat = new THREE.MeshBasicMaterial({ color: 0x19e6ff, transparent: true, opacity: 0.9 });
       const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, 0.06, d + 0.08), bandMat);
       band.position.set(0, 0.1, 0);
+      band.visible = !!f.car || !prof; // the charge band only makes sense for a linked vehicle
       g.add(band);
       ctx.anchors.cars.push({ f, band: bandMat, group: g, floor: ctx.cur.i, w, d, h });
       if (f.name && !f.car) {

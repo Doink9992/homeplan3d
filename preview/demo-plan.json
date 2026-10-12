@@ -337,6 +337,7 @@
      "d": 4.6,
      "h": 1.5,
      "name": "E-Auto",
+     "body": "hatch",
      "car": {
       "entity": "sensor.ev_range"
      }
