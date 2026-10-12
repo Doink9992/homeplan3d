@@ -465,7 +465,7 @@ export function buildBuilding(plan, opts) {
         sp.scale.set(3.15, 0.45, 1);
         sp.position.set(lp[0], 1.05, lp[1]);
         g.add(sp);
-        ctx.dyn.push({ kind: "climate", ...cl, sprite: sp, mat, base: { color: mat.color.clone(), emissive: mat.emissive.clone(), ei: mat.emissiveIntensity } });
+        ctx.dyn.push({ kind: "roomclimate", ...cl, sprite: sp, mat, base: { color: mat.color.clone(), emissive: mat.emissive.clone(), ei: mat.emissiveIntensity } });
       }
     });
 

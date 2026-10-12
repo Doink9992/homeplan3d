@@ -13,6 +13,7 @@ const dc = (device_class, unit) => ({ device_class, unit_of_measurement: unit })
 const states = {
   "light.wohnzimmer": { state: "on", attributes: { friendly_name: "Wohnzimmer", brightness: 200, rgb_color: [255, 160, 60] } },
   "light.deckenlicht": { state: "off", attributes: { friendly_name: "Deckenlicht" } },
+  "climate.heizung_wohnen": { state: "heat", attributes: { friendly_name: "Heizung Wohnen", current_temperature: 21.4 } },
   "switch.stehlampe": { state: "on", attributes: { friendly_name: "Stehlampe" } },
   "switch.steckdose_tv": { state: "on", attributes: { friendly_name: "Steckdose TV" } },
   "switch.kaffeemaschine": { state: "off", attributes: { friendly_name: "Kaffeemaschine" } },

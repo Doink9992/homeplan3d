@@ -687,7 +687,7 @@ class HomePlan3DView extends HTMLElement {
     this.world.add(res.root);
     this.dyn = res.dyn;
     this.pickables = res.pickables;
-    const hc = this.dyn.some((d) => d.kind === "climate");
+    const hc = this.dyn.some((d) => d.kind === "roomclimate");
     if (hc !== this.hasClimate) { this.hasClimate = hc; this.renderBar(); }
     const ext = this.extent();
     if (ext) {
@@ -732,7 +732,7 @@ class HomePlan3DView extends HTMLElement {
     const st = this._hass?.states;
     if (!st) return;
     for (const d of this.dyn) {
-      if (d.kind === "climate") { this.updateClimate(d); continue; }
+      if (d.kind === "roomclimate") { this.updateClimate(d); continue; }
       const s = st[d.entity];
       if (!s) continue;
       const on = !OFF_STATES.includes(s.state);
