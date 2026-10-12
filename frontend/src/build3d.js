@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, isStairs, DEFAULTS } from "./plan.js";
+import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, stairOpening, isStairs, DEFAULTS } from "./plan.js";
 import { labelPoint, rad, domainOf, inPoly, bbox, furnitureCorners } from "./util.js";
 import { siteFrame, localToPlan, resolveParts, pvGrid, doorSpec, stallCenters, PART_LABELS } from "./lib/site.js";
 
@@ -599,7 +599,7 @@ export function buildSite(plan, ctx, opts = {}) {
         const base = elevation(plan, k);
         if (base >= e) return;
         fl2.furniture.filter(isStairs).forEach((s) => {
-          const poly = furnitureCorners(s);
+          const poly = stairOpening(s);
           if (base + (s.h || 2.7) >= e - 0.35 && poly.every((p) => inPoly(p, b.points))) slabShape.holes.push(new THREE.Path(poly.map((p) => new THREE.Vector2(p[0], -p[1]))));
         });
       });

@@ -1,4 +1,4 @@
-import { uid, rad, distSeg, inPoly, furnitureCorners } from "./util.js";
+import { uid, rad, distSeg, inPoly, furnitureCorners, localToWorld } from "./util.js";
 
 export const DEFAULTS = { wallExterior: 0.24, wallInterior: 0.12, slab: 0.18 };
 
@@ -205,6 +205,14 @@ export function hostSegment(o, segs) {
 // ---------------------------------------------------------------- stairs
 export const isStairs = (f) => f.type === "stairs" || f.type === "stairs_u";
 
+/** Outline of the floor opening a stair needs: its footprint, or for the U with two landings only the arms (the well stays closed). */
+export function stairOpening(f) {
+  if (f.type !== "stairs_u" || f.landings !== 2) return furnitureCorners(f);
+  const w = f.w || 1.9, d = f.d || 3.2, aw = Math.min(1.2, w / 3, d / 3), m = f.flip ? -1 : 1;
+  const u = [[-w / 2, d / 2], [w / 2, d / 2], [w / 2, -d / 2], [-w / 2, -d / 2], [-w / 2, -d / 2 + aw], [w / 2 - aw, -d / 2 + aw], [w / 2 - aw, d / 2 - aw], [-w / 2, d / 2 - aw]];
+  return u.map(([x, z]) => localToWorld(f, m * x, z));
+}
+
 /** Floor openings (polygons) in floor i where stairs from lower floors arrive. */
 export function stairHoles(plan, i) {
   const out = [];
@@ -213,7 +221,7 @@ export function stairHoles(plan, i) {
     const base = elevation(plan, k);
     plan.floors[k].furniture.filter(isStairs).forEach((f) => {
       if (base + (f.h || 2.7) < top - 0.35 || base >= top) return;
-      const poly = furnitureCorners(f);
+      const poly = stairOpening(f);
       if (plan.floors[i].rooms.some((r) => poly.every((p) => inPoly(p, r.points)))) out.push(poly);
     });
   }
