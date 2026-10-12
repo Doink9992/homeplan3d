@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, isStairs, DEFAULTS } from "./plan.js";
-import { labelPoint, rad, domainOf, inPoly, bbox } from "./util.js";
+import { labelPoint, rad, domainOf, inPoly, bbox, furnitureCorners } from "./util.js";
 import { siteFrame, localToPlan, resolveParts, pvGrid, doorSpec, stallCenters, PART_LABELS } from "./lib/site.js";
 
 export const THEMES = {
@@ -19,7 +19,7 @@ const COL = {
   tv: "#5a6bff", monitor: "#5a6bff", speaker: "#ff2bd6", soundbar: "#ff2bd6", car: "#9aa5c0", battery: "#7bd88f", wallbox: "#19e6ff",
 };
 const DIM = {
-  stairs: [1, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02],
+  stairs: [1, 3.2, 2.75], stairs_u: [1.9, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02],
   tv: [1.2, 0.06, 0.7], monitor: [0.6, 0.05, 0.36], speaker: [0.22, 0.22, 0.32], soundbar: [0.9, 0.09, 0.07], car: [1.9, 4.6, 1.5], battery: [0.6, 0.25, 1.1], wallbox: [0.25, 0.12, 0.35],
 };
 const MOUNT = { kitchen_wall: 1.4, tv: 0.8, monitor: 0.74, soundbar: 0.45 };
@@ -92,8 +92,15 @@ function buildFurniture(f, elev, ctx) {
   };
 
   switch (f.type) {
-    case "stairs":
     case "stairs_u": {
+      // U-shaped: the lower flight starts at the front (+z) on the east half, a landing at the back, the upper flight returns on the west half
+      const n = Math.max(8, 2 * Math.round(h / 0.18 / 2)), half = n / 2, land = Math.min(1.2, d * 0.25), sd = (d - land) / half, fw = w / 2 - 0.02;
+      for (let i = 0; i < half; i++) add(box(fw, ((i + 1) * h) / n, sd, 0, w / 4, d / 2 - (i + 0.5) * sd));
+      add(box(w, h / 2, land, 0, 0, -d / 2 + land / 2));
+      for (let j = 0; j < half; j++) add(box(fw, h / 2 + ((j + 1) * h) / n, sd, 0, -w / 4, -d / 2 + land + (j + 0.5) * sd));
+      break;
+    }
+    case "stairs": {
       const n = Math.max(4, Math.round(h / 0.18)), sd = d / n;
       for (let i = 0; i < n; i++) add(box(w, ((i + 1) * h) / n, sd, 0, 0, d / 2 - (i + 0.5) * sd));
       break;
@@ -573,7 +580,17 @@ export function buildSite(plan, ctx, opts = {}) {
 
     // intermediate floors (storeys above ground level): translucent slab + outline
     (b.storeys || []).filter((e) => e > 0.05 && e < h - 0.3).forEach((e) => {
-      const slab = new THREE.ExtrudeGeometry(new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
+      const slabShape = new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1])));
+      // stairs from the house floors below that end inside this building open the slab
+      plan.floors.forEach((fl2, k) => {
+        const base = elevation(plan, k);
+        if (base >= e) return;
+        fl2.furniture.filter(isStairs).forEach((s) => {
+          const poly = furnitureCorners(s);
+          if (base + (s.h || 2.7) >= e - 0.35 && poly.every((p) => inPoly(p, b.points))) slabShape.holes.push(new THREE.Path(poly.map((p) => new THREE.Vector2(p[0], -p[1]))));
+        });
+      });
+      const slab = new THREE.ExtrudeGeometry(slabShape, { depth: 0.18, bevelEnabled: false, curveSegments: 1 });
       const sm = new THREE.Mesh(slab, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.35, transparent: true, opacity: day ? 0.9 : 0.45, side: THREE.DoubleSide, depthWrite: false }));
       sm.rotation.x = -Math.PI / 2;
       sm.position.y = e - 0.18;
