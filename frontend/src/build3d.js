@@ -462,7 +462,8 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
       floor.rotation.x = -Math.PI / 2;
       floor.position.set(uc, 0.02, 0);
       fg.add(floor);
-      if (pt.type === "carport") for (let k = 0; k < n; k++) labelAt(String(k + 1), u0 + (k + 0.5) * w, 0, 0.05);
+      // stalls are numbered from the west end (next to the garage)
+      if (pt.type === "carport") for (let k = 0; k < n; k++) labelAt(String(k + 1), f.tToU(pt.t0 + ((k + 0.5) * (pt.t1 - pt.t0)) / n), 0, 0.05);
     }
   });
   if (b.layout && parts.some((p) => p.type === "carport")) {
