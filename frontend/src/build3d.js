@@ -74,6 +74,7 @@ function buildFurniture(f, elev, ctx) {
     mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), lineMat));
     g.add(mesh);
     mesh.userData.entity = f.entity || null;
+    mesh.userData.furnId = f.id;
     ctx.pickables.push(mesh);
     geos.push(mesh);
     return mesh;

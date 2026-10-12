@@ -40,6 +40,14 @@
     }
    ],
    "windows": []
+  },
+  "energy": {
+   "solar": "sensor.pv_power",
+   "grid": "sensor.grid_power",
+   "battery": "sensor.battery_power",
+   "battery_soc": "sensor.battery_soc",
+   "consumption": "sensor.house_power",
+   "wallbox": "sensor.wallbox_power"
   }
  },
  "floors": [
@@ -275,6 +283,63 @@
      "h": 0.32,
      "mountY": 0.9,
      "entity": "media_player.kueche"
+    },
+    {
+     "id": "f_meter",
+     "type": "meter",
+     "x": 1.0,
+     "z": 6.75,
+     "rot": 180,
+     "w": 0.5,
+     "d": 0.2,
+     "h": 1.1,
+     "power": "sensor.house_power",
+     "marker": "always"
+    },
+    {
+     "id": "f_grid",
+     "type": "grid_point",
+     "x": 0.3,
+     "z": 6.8,
+     "rot": 0,
+     "w": 0.3,
+     "d": 0.3,
+     "h": 0.6
+    },
+    {
+     "id": "f_bat",
+     "type": "battery",
+     "x": 8.3,
+     "z": 6.6,
+     "rot": 0,
+     "w": 0.6,
+     "d": 0.25,
+     "h": 1.1
+    },
+    {
+     "id": "f_wb",
+     "type": "wallbox",
+     "x": 6.2,
+     "z": 6.85,
+     "rot": 0,
+     "w": 0.25,
+     "d": 0.12,
+     "h": 0.35,
+     "power": "sensor.wallbox_power"
+    },
+    {
+     "id": "f_car",
+     "type": "car",
+     "x": -3.6,
+     "z": 3.5,
+     "rot": 0,
+     "w": 1.9,
+     "d": 4.6,
+     "h": 1.5,
+     "name": "E-Auto",
+     "car": {
+      "entity": "sensor.ev_range"
+     }
     }
    ],
    "devices": [

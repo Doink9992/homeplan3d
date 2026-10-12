@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createFeatures } from "./features/index.js";
 import { openScreenEditor } from "./features/screens-ui.js";
+import { CarFeature } from "./features/car.js";
 import { uid, snap, domainOf, clone, inPoly, bbox, distSeg, polyArea, labelPoint, furnitureCorners, rad } from "./util.js";
 import { newFloor, emptyPlan, normalizePlan, elevation, wallNetwork, roofSections, newSiteBuilding, applyLevels } from "./plan.js";
 import { buildBuilding, setSprite, THEMES } from "./build3d.js";
@@ -64,6 +65,16 @@ button.on{background:#0b3c4a;border-color:var(--neon);box-shadow:0 0 8px var(--n
 .card3d b{color:#19e6ff}
 .card3d .sub{opacity:.7;font-size:11px}
 .card3d button{padding:2px 8px;font-size:12px}
+.holo .en{min-width:210px}
+.holo .r{display:flex;gap:8px;align-items:baseline;justify-content:space-between;margin:2px 0}
+.holo .r b{color:#fff}.holo .r .sub{opacity:.65;font-size:11px}
+.holo canvas{display:block;margin-top:4px;width:100%}
+.pw{padding:2px 8px;font-size:11px}
+.pin{padding:3px 9px;font-size:11px}
+.carcard{min-width:210px}
+.carcard .r{display:flex;justify-content:space-between;gap:12px;margin:2px 0}
+.carcard .bar{height:7px;border-radius:4px;background:#1b2440;margin:6px 0;overflow:hidden}.carcard .bar i{display:block;height:100%}
+.carcard .btns{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
 .np{display:flex;gap:8px;align-items:center;min-width:220px}
 .np img{width:46px;height:46px;border-radius:6px;object-fit:cover;background:#111}
 .np .t{max-width:160px;overflow:hidden;text-overflow:ellipsis}
@@ -135,6 +146,19 @@ class HomePlan3DView extends HTMLElement {
     if (!on) f.reset();
     else f.update(this.getStates() || {});
     this.renderBar();
+  }
+  openFxMenu() {
+    this.closeOverlay();
+    const box = document.createElement("div");
+    box.className = "overlay";
+    box.style.cssText = "right:12px;top:52px;width:230px";
+    box.innerHTML = `<h4 style="margin:0 0 6px">Funktionen einrichten</h4>${this.features.filter((f) => f.settingsLabel).map((f, i) => `<button class="full" data-i="${i}">${f.settingsLabel}</button>`).join("")}`;
+    box.onclick = (e) => {
+      const i = e.target.closest("[data-i]")?.dataset.i;
+      if (i != null) this.features.filter((f) => f.settingsLabel)[+i].openSettings();
+    };
+    this.shadowRoot.querySelector(".wrap").append(box);
+    this._overlay = box;
   }
   closeOverlay() {
     if (this._overlay) { this._overlay.remove(); this._overlay = null; }
@@ -292,6 +316,7 @@ class HomePlan3DView extends HTMLElement {
     const defs = [["select", "↖ Auswahl"], ["rect", "▭ Raum"], ["room", "⬠ Polygon"], ["wall", "▬ Wand"], ["door", "🚪 Tür"], ["window", "🪟 Fenster"], ["furn", "🪑 Möbel"], ["device", "💡 Gerät"], ["building", "🏠 Gebäude"], ["erase", "🗑"]];
     defs.forEach(([k, label]) => tools.append(mk(label, this.tool === k ? "on" : "", () => { this.tool = k; this.draft = []; this.renderBar(); this.renderSide(); this.draw2D(); })));
     tools.append(mk("⤢", "", () => { this.fit2D(); this.draw2D(); }, "Ansicht einpassen"));
+    tools.append(mk("⚙ Funktionen", "", () => this.openFxMenu(), "Wetter, Energie, Auto, Kameras … einrichten"));
   }
   setEditing(v) {
     this.editing = v;
@@ -430,7 +455,7 @@ class HomePlan3DView extends HTMLElement {
         { k: "type", l: "Typ", t: "select", o: FURN_TYPES }, { k: "name", l: "Name" }, { k: "rot", l: "Drehung (°)", t: "number", s: 5 },
         { k: "w", l: "Breite", t: "number" }, { k: "d", l: "Tiefe", t: "number" }, { k: "h", l: "Höhe", t: "number" }, { k: "mountY", l: "Höhe über Boden", t: "number", p: "0" },
         { k: "entity", l: "Entität (Zustand/Leuchten)", list: "ents" }, { k: "power", l: "Leistungs-Sensor", list: "ents" },
-      ])}${obj.type === "tv" || obj.type === "monitor" ? `<button class="full" id="scr-edit">🖥 Bildschirm-Regeln …</button>` : ""}`;
+      ])}${obj.type === "tv" || obj.type === "monitor" ? `<button class="full" id="scr-edit">🖥 Bildschirm-Regeln …</button>` : ""}${obj.type === "car" ? `<button class="full" id="car-edit">🚗 Auto zuordnen …</button>` : ""}`;
     } else if (s?.kind === "site") {
       obj = find(this.plan.site?.buildings || [], s.id);
       if (obj) selHtml += `<h4>Gebäude</h4>${this.formHtml(obj, [
@@ -468,6 +493,7 @@ class HomePlan3DView extends HTMLElement {
     side.querySelector("#pent")?.addEventListener("change", (e) => (this.pendingEntity = e.target.value));
     side.querySelector("#ftype")?.addEventListener("change", (e) => (this.furnType = e.target.value));
     side.querySelector("#scr-edit")?.addEventListener("click", () => openScreenEditor(this, obj));
+    side.querySelector("#car-edit")?.addEventListener("click", () => this.features.find((f) => f instanceof CarFeature).openCarSettings(obj));
     this.fillDevList();
     side.querySelector("#devfilter").oninput = (e) => { this._devFilter = e.target.value; this.fillDevList(); };
     side.querySelector("#dev-selall").onclick = () => {
@@ -818,7 +844,8 @@ class HomePlan3DView extends HTMLElement {
         const unit = s.attributes.unit_of_measurement || "";
         const text = unit === "W" && Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(2)} kW` : `${Math.round(v * 10) / 10} ${unit}`;
         setSprite(d.sprite, text);
-        d.sprite.visible = d.always || Math.abs(v) > 5;
+        const cards = this.features.some((f) => f.id === "energy" && f.on && f.available()) && this.holo;
+        d.sprite.visible = !cards && (d.always || Math.abs(v) > 5);
       } else if (d.kind === "solar") {
         const v = parseFloat(s.state) || 0;
         d.mat.emissiveIntensity = 0.15 + Math.min(1, v / d.wp) * 1.2;

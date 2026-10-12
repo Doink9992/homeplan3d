@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Feature, glowTexture, clamp } from "./base.js";
 import { mapWeather, weatherLabel, skyDirection } from "../lib/weathermap.js";
+import { openSettings } from "./settings-ui.js";
 
 const DEFAULTS = { rain: true, snow: true, lightning: true, fog: false, clouds: true, sun: true };
 
@@ -34,7 +35,22 @@ export class WeatherFeature extends Feature {
   get id() { return "weather"; }
   get label() { return "☁ Wetter"; }
   get title() { return "Wetter draußen: Regen, Schnee, Gewitter, Wolken, Sonne und Mond"; }
+  get settingsLabel() { return "☁ Wetter"; }
   cfg() { return { ...DEFAULTS, ...(this.settings.weather || {}) }; }
+  openSettings() {
+    const obj = (this.settings.weather = { ...DEFAULTS, ...(this.settings.weather || {}) });
+    const ents = Object.keys(this.states).filter((k) => k.startsWith("weather."));
+    openSettings(this.view, {
+      title: "☁ Wetter draußen",
+      obj,
+      note: "Die Wetter-Entität steuert Regen, Schnee, Gewitter, Nebel und Wolken; Sonne und Mond kommen von sun.sun.",
+      fields: [
+        { k: "entity", l: "Wetter-Entität", t: "select", o: [["", "automatisch"], ...ents] },
+        { k: "rain", l: "Regen", t: "checkbox" }, { k: "snow", l: "Schnee", t: "checkbox" }, { k: "lightning", l: "Gewitter und Blitze", t: "checkbox" },
+        { k: "fog", l: "Nebel", t: "checkbox" }, { k: "clouds", l: "Wolken und Abdunkeln", t: "checkbox" }, { k: "sun", l: "Sonne und Mond", t: "checkbox" },
+      ],
+    });
+  }
 
   entity() {
     const st = this.states;

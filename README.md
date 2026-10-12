@@ -29,6 +29,8 @@ Die Erweiterungen sind eingebaut. Ihre Schalter erscheinen in der Leiste, sobald
 - **☁ Wetter** – Regen, Schnee, Gewitter mit Blitz, Nebel (optional), Wolken, Windneigung, Sonne am Tag und Mond in der Nacht, gesteuert von einer `weather.*`-Entität und `sun.sun`. Die Wetter-Entität wird automatisch gewählt oder unter `settings.weather.entity` festgelegt.
 - **Live-Bildschirme** – Fernseher und Monitore (Möbeltypen `tv`, `monitor`) zeigen Cover und Farbe der laufenden App. Eigene Bild-Regeln legen fest, was bei bestimmten Zuständen erscheint: Logo, hochgeladenes Bild oder ein Kamerabild (`camera.xyz`, alle 5 s aktualisiert). Möbel anklicken, dann **🖥 Bildschirm-Regeln …**.
 - **🔊 Sound** – Karten mit Cover, Titel, Transport und Lautstärke über spielenden Mediaplayern, Klangringe nach Lautstärke und Multiroom-Linien über `group_members`. Langes Drücken auf einen Mediaplayer öffnet das Schnellmenü mit Quellen und Medienbrowser.
+- **⚡ Energie** – animierte Kabel mit Leistungspunkten (Farbe = Art, Tempo = Leistung) zwischen PV, Netz, Akku, Wallbox und Haus, leuchtende Solarmodule, eine Hologramm-Karte (PV, Haus, Netz, Akku, Autarkie, Gas/Wasser, Tageskurve) und Leistungskarten an Geräten. Einrichten unter **⚙ Funktionen → Energie**, auch per **Übernehmen vom Energie-Dashboard**. Als Möbeltypen helfen `meter`, `grid_point`, `battery` und `wallbox` für die Knotenpunkte der Kabel.
+- **🚗 Auto** – Möbeltyp `car`: Lichtband nach Ladestand, Pin mit Ladestand, Reichweite, Ladeleistung und Verriegelung, Karte mit Schaltern für Verriegelung, Klima und Laden. Eine Entität des Autos genügt, die übrigen werden am selben Gerät gefunden (Möbel anklicken, **🚗 Auto zuordnen …**).
 
 ## Geräte verschieben und entfernen
 

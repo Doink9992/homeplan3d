@@ -1,0 +1,4 @@
+* text=auto eol=lf
+custom_components/homeplan3d/www/homeplan3d.js -diff
+*.png binary
+*.jpg binary
