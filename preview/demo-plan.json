@@ -565,7 +565,7 @@
     "visible": true,
     "points": [
      [
-      -13.5,
+      -24.2,
       1
      ],
      [
@@ -577,7 +577,7 @@
       4
      ],
      [
-      -13.5,
+      -24.2,
       4
      ]
     ],
@@ -588,18 +588,37 @@
      "overhang": 0.3,
      "high": "north"
     },
-    "layout": {
-     "garage": "west",
-     "carportStalls": 4,
-     "stallWidth": 2.9
-    },
     "pv": {
      "enabled": true,
-     "fill": true,
-     "portrait": false,
+     "fill": false,
+     "rows": 1,
+     "cols": 2,
+     "orientation": "portrait",
+     "over": "#1",
+     "edge": "low",
      "wp": 420,
-     "entity": null
-    }
+     "entity": "sensor.pv_power"
+    },
+    "parts": [
+     {
+      "type": "garage",
+      "len": 5.3
+     },
+     {
+      "type": "garage",
+      "len": null
+     },
+     {
+      "type": "carport",
+      "stalls": 4,
+      "stallWidth": 2.9
+     },
+     {
+      "type": "bike",
+      "len": 3,
+      "door": 1.2
+     }
+    ]
    }
   ]
  }

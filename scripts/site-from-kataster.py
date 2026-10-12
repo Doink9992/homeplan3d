@@ -176,7 +176,7 @@ def main():
             "points": poly, "height": b["height"], **({"levels": b["levels"]} if b.get("levels") else {}),
             "roof": {"type": b["roof"] if (kind == "rect" or b["roof"] == "shed") else "flat", "pitch": b["pitch"], "overhang": 0.3,
                      **({"high": b["high"]} if b.get("high") else {})},
-            **{k: b[k] for k in ("layout", "pv") if b.get(k)},
+            **{k: b[k] for k in ("layout", "parts", "pv") if b.get(k)},
             "fromImage": kind,
         })
         dd.polygon([tuple(map(float, p)) for p in pts], outline=(255, 0, 0))

@@ -66,3 +66,61 @@ test("pv grid fills the roof", () => {
   // modules stay on the roof
   assert.ok(g.modules.every((m) => m.s - m.mh / 2 >= 0 && m.s + m.mh / 2 <= g.slope));
 });
+
+test("garage, four carport stalls and a bicycle garage at the east end", () => {
+  const parts = layoutParts(23, { garage: "west", carportStalls: 4, stallWidth: 2.9, bike: "east", bikeWidth: 3, bikeDoor: 1.2 });
+  assert.deepEqual(parts.map((p) => p.type), ["garage", "carport", "bike"]);
+  const [g, c, b] = parts;
+  assert.ok(Math.abs(g.t1 - 8.4) < 1e-9 && g.t0 === 0);
+  assert.ok(Math.abs(c.t1 - c.t0 - 11.6) < 1e-9 && Math.abs(c.t0 - 8.4) < 1e-9);
+  assert.ok(Math.abs(b.t1 - 23) < 1e-9 && Math.abs(b.t1 - b.t0 - 3) < 1e-9 && b.door === 1.2);
+});
+
+test("a bicycle garage next to the garage on the other side", () => {
+  const p = layoutParts(20, { garage: "east", carportStalls: 2, stallWidth: 3, bike: "west" });
+  assert.deepEqual(p.map((x) => x.type), ["bike", "carport", "garage"]);
+  assert.equal(p[0].t0, 0);
+});
+
+test("pv block above the low eave and over a given position", () => {
+  const g = pvGrid({ L: 23, W: 2.9, pitchDeg: 12, fill: false, rows: 1, cols: 2, orientation: "portrait", align: "low", uCenter: -7 });
+  assert.equal(g.modules.length, 2);
+  assert.ok(g.modules.every((m) => Math.abs(m.s - (0.25 + m.mh / 2)) < 1e-9));
+  assert.ok(Math.abs((g.modules[0].u + g.modules[1].u) / 2 - -7) < 1e-9);
+  const hi = pvGrid({ L: 23, W: 2.9, pitchDeg: 12, fill: false, rows: 1, cols: 1, orientation: "landscape", align: "high" });
+  assert.ok(Math.abs(hi.modules[0].s + hi.modules[0].mh / 2 - (hi.slope - 0.25)) < 1e-9);
+});
+
+import { partsFromList, resolveParts, partsFromLayout } from "../src/lib/site.js";
+
+test("explicit parts: far-left garage, a free garage, four stalls, bicycle room", () => {
+  const parts = partsFromList(22.9, [
+    { type: "garage", len: 5.3 },
+    { type: "garage" },
+    { type: "carport", stalls: 4, stallWidth: 2.9 },
+    { type: "bike", len: 3, door: 1.2 },
+  ]);
+  assert.deepEqual(parts.map((p) => p.type), ["garage", "garage", "carport", "bike"]);
+  assert.equal(parts[0].t0, 0);
+  assert.ok(Math.abs(parts[0].t1 - 5.3) < 1e-9);
+  assert.ok(Math.abs(parts[1].t1 - parts[1].t0 - 3.0) < 1e-9); // the free garage takes the rest
+  assert.ok(Math.abs(parts[2].t1 - parts[2].t0 - 11.6) < 1e-9 && parts[2].stalls === 4);
+  assert.ok(Math.abs(parts[3].t1 - 22.9) < 1e-9 && parts[3].door === 1.2);
+  assert.deepEqual(parts.map((p) => p.index), [0, 1, 2, 3]);
+});
+
+test("several free parts share the rest, too much fixed length is scaled down", () => {
+  const shared = partsFromList(10, [{ type: "garage" }, { type: "garage" }, { type: "bike", len: 2 }]);
+  assert.ok(Math.abs(shared[0].t1 - 4) < 1e-9 && Math.abs(shared[1].t1 - 8) < 1e-9);
+  const scaled = partsFromList(10, [{ type: "garage", len: 8 }, { type: "bike", len: 4 }]);
+  assert.ok(Math.abs(scaled[1].t1 - 10) < 1e-9);
+});
+
+test("older layout objects still work and convert to a list", () => {
+  const layout = { garage: "west", carportStalls: 4, stallWidth: 2.9, bike: "east", bikeWidth: 3, bikeDoor: 1.2 };
+  assert.deepEqual(resolveParts(23, { layout }).map((p) => p.type), ["garage", "carport", "bike"]);
+  const list = partsFromLayout(23, layout);
+  assert.deepEqual(list.map((p) => p.type), ["garage", "carport", "bike"]);
+  assert.deepEqual(resolveParts(23, { parts: list }).map((p) => [p.t0.toFixed(2), p.t1.toFixed(2)]), resolveParts(23, { layout }).map((p) => [p.t0.toFixed(2), p.t1.toFixed(2)]));
+  assert.equal(resolveParts(23, {}), null);
+});

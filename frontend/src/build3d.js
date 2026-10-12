@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, isStairs, DEFAULTS } from "./plan.js";
 import { labelPoint, rad, domainOf, inPoly, bbox } from "./util.js";
-import { siteFrame, localToPlan, layoutParts, pvGrid } from "./lib/site.js";
+import { siteFrame, localToPlan, resolveParts, pvGrid, PART_LABELS } from "./lib/site.js";
 
 export const THEMES = {
   neon: { bg: 0x07080f, wall: 0x19e6ff, wallOp: 0.2, edgeOp: 0.85, floorK: 0.25, floorEm: 0.14, door: 0xff2bd6, win: 0x6fa8ff, roof: 0xff9a3c, text: "#dfe8ff", glow: "#19e6ff" },
@@ -409,10 +409,11 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
     g.add(sp);
   };
 
-  const parts = layoutParts(L, b.layout) || [{ type: "solid", t0: 0, t1: L }];
+  const parts = resolveParts(L, b) || [{ type: "solid", t0: 0, t1: L }];
+  const hasParts = !!(b.parts?.length || b.layout);
   parts.forEach((pt) => {
     const u0 = Math.min(f.tToU(pt.t0), f.tToU(pt.t1)), u1 = Math.max(f.tToU(pt.t0), f.tToU(pt.t1)), len = u1 - u0, uc = (u0 + u1) / 2;
-    if (pt.type === "garage" || pt.type === "solid") {
+    if (pt.type === "garage" || pt.type === "solid" || pt.type === "bike") {
       // wedge prism under the sloped roof: side profile (z, y) extruded along the long side
       const sh = new THREE.Shape([new THREE.Vector2(-W / 2, 0), new THREE.Vector2(W / 2, 0), new THREE.Vector2(W / 2, hLow), new THREE.Vector2(-W / 2, hHigh)]);
       const geo = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false });
@@ -424,15 +425,16 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
       mesh.renderOrder = 1;
       fg.add(mesh);
       ctx.pickables.push(mesh);
-      if (pt.type === "garage" && b.layout) {
-        // garage door on the low side
-        const dw = Math.min(2.6, len * 0.6), dh = Math.min(2.2, hLow - 0.2);
+      if ((pt.type === "garage" || pt.type === "bike") && hasParts) {
+        // door in the middle of the room, on the low side
+        const bikeRoom = pt.type === "bike";
+        const dw = Math.min(Number(pt.door) || (bikeRoom ? 1.2 : 2.5), len - 0.2), dh = Math.min(bikeRoom ? 2.0 : 2.2, hLow - 0.2);
         const door = new THREE.Mesh(new THREE.BoxGeometry(dw, dh, 0.05), new THREE.MeshStandardMaterial({ color: 0xff2bd6, emissive: 0xff2bd6, emissiveIntensity: 0.5, transparent: true, opacity: 0.5, depthWrite: false }));
         door.position.set(uc, dh / 2, W / 2 + 0.03);
         door.add(new THREE.LineSegments(new THREE.EdgesGeometry(door.geometry), new THREE.LineBasicMaterial({ color: 0xff2bd6 })));
         fg.add(door);
       }
-      labelAt(pt.type === "garage" ? "Garage" : b.name || "", uc, 0, 0.06);
+      labelAt(pt.name || (pt.type === "solid" ? b.name || "" : PART_LABELS[pt.type] || ""), uc, 0, 0.06);
     } else {
       // carport / open bay: back wall on the high side, posts, floor marks
       const back = new THREE.BoxGeometry(len, hHigh, 0.1);
@@ -466,7 +468,7 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
       if (pt.type === "carport") for (let k = 0; k < n; k++) labelAt(String(k + 1), f.tToU(pt.t0 + ((k + 0.5) * (pt.t1 - pt.t0)) / n), 0, 0.05);
     }
   });
-  if (b.layout && parts.some((p) => p.type === "carport")) {
+  if (hasParts && parts.some((p) => p.type === "carport")) {
     const c = parts.find((p) => p.type === "carport");
     labelAt(`Carport · ${c.stalls} Stellplätze`, f.tToU((c.t0 + c.t1) / 2), W / 2 + 0.9, 0.06);
   }
@@ -474,7 +476,12 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
   // PV modules on the roof
   const pv = b.pv;
   if (pv && pv.enabled !== false) {
-    const grid = pvGrid({ L, W, pitchDeg: roof.pitch ?? 12, orientation: pv.orientation, portrait: pv.portrait, fill: pv.fill !== false, rows: pv.rows, cols: pv.cols });
+    // optionally centred over a part (e.g. above the garage door) and pushed to the low eave
+    const over = pv.over ? (String(pv.over).startsWith("#") ? parts.find((p) => p.index === Number(String(pv.over).slice(1))) : parts.find((p) => p.type === pv.over)) : null;
+    const grid = pvGrid({
+      L, W, pitchDeg: roof.pitch ?? 12, orientation: pv.orientation, portrait: pv.portrait, fill: pv.fill !== false, rows: pv.rows, cols: pv.cols,
+      align: pv.edge || "center", uCenter: over ? f.tToU((over.t0 + over.t1) / 2) : 0,
+    });
     const mat = new THREE.MeshStandardMaterial({ color: 0x0b1530, emissive: 0x1f6bff, emissiveIntensity: 0.15, metalness: 0.4, roughness: 0.3 });
     const line = new THREE.LineBasicMaterial({ color: 0x5aa0ff });
     const cos = Math.cos(pitch), sin = Math.sin(pitch);
@@ -512,7 +519,7 @@ export function buildSite(plan, ctx, opts = {}) {
   };
   buildings.forEach((b) => {
     if (b.visible === false || !b.points || b.points.length < 3) return;
-    if (b.roof?.type === "shed" || b.layout) {
+    if (b.roof?.type === "shed" || b.layout || b.parts?.length) {
       group.add(buildShedBuilding(plan, b, ctx, opts, { wallMat, lineMat, roofMats, col }));
       return;
     }

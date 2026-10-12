@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createFeatures } from "./features/index.js";
 import { openScreenEditor } from "./features/screens-ui.js";
-import { siteFrame, localToPlan, layoutParts } from "./lib/site.js";
+import { siteFrame, localToPlan, resolveParts, partsFromLayout, PART_LABELS } from "./lib/site.js";
 import { CarFeature } from "./features/car.js";
 import { uid, snap, domainOf, clone, inPoly, bbox, distSeg, polyArea, labelPoint, furnitureCorners, rad } from "./util.js";
 import { newFloor, emptyPlan, normalizePlan, elevation, wallNetwork, roofSections, newSiteBuilding, applyLevels } from "./plan.js";
@@ -76,6 +76,9 @@ button.on{background:#0b3c4a;border-color:var(--neon);box-shadow:0 0 8px var(--n
 .carcard .r{display:flex;justify-content:space-between;gap:12px;margin:2px 0}
 .carcard .bar{height:7px;border-radius:4px;background:#1b2440;margin:6px 0;overflow:hidden}.carcard .bar i{display:block;height:100%}
 .carcard .btns{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.prow{border:1px solid #1d2a4a;border-radius:8px;padding:4px;margin:4px 0}
+.prow .l1,.prow .l2{display:flex;gap:3px;margin:2px 0}.prow .l1 select{flex:1}.prow .l2 input{min-width:0}
+.prow button{padding:2px 6px}
 .np{display:flex;gap:8px;align-items:center;min-width:220px}
 .np img{width:46px;height:46px;border-radius:6px;object-fit:cover;background:#111}
 .np .t{max-width:160px;overflow:hidden;text-overflow:ellipsis}
@@ -464,13 +467,11 @@ class HomePlan3DView extends HTMLElement {
         { k: "roof.type", l: "Dach", t: "select", o: [["flat", "Flach"], ["gable", "Satteldach"], ["shed", "Pultdach"]] }, { k: "roof.pitch", l: "Neigung (°)", t: "number", s: 1 },
         ...(obj.roof?.type === "shed" ? [{ k: "roof.high", l: "Hohe Seite (zum Nachbarn)", t: "select", o: [["south", "Süd"], ["north", "Nord"], ["east", "Ost"], ["west", "West"]], def: "south" }] : []),
         { k: "visible", l: "Sichtbar", t: "checkbox" },
-      ])}${obj.roof?.type === "shed" ? `<h4>Aufteilung</h4>${this.formHtml(obj, [
-        { k: "layout.garage", l: "Garage", t: "select", o: [["", "keine Aufteilung"], ["west", "links (West, Straße)"], ["east", "rechts (Ost)"], ["none", "keine Garage, nur Carport"]] },
-        { k: "layout.carportStalls", l: "Carport-Stellplätze", t: "number", s: 1 }, { k: "layout.stallWidth", l: "Breite je Stellplatz (m)", t: "number", s: 0.1 },
-        { k: "layout.garageLen", l: "Garagenlänge (m, leer = Rest)", t: "number", s: 0.1 },
-      ])}<h4>Photovoltaik auf dem Dach</h4>${this.formHtml(obj, [
+      ])}${obj.roof?.type === "shed" ? `${this.partsHtml(obj)}<h4>Photovoltaik auf dem Dach</h4>${this.formHtml(obj, [
         { k: "pv.enabled", l: "PV-Module auf dem Dach", t: "checkbox" }, { k: "pv.fill", l: "Dachfläche füllen", t: "checkbox", def: true },
         { k: "pv.orientation", l: "Modulausrichtung", t: "select", o: [["auto", "automatisch (mehr Module)"], ["landscape", "quer"], ["portrait", "hochkant"]], def: "auto" }, { k: "pv.rows", l: "Reihen (ohne Füllen)", t: "number", s: 1 }, { k: "pv.cols", l: "Module je Reihe (ohne Füllen)", t: "number", s: 1 },
+        { k: "pv.over", l: "Lage entlang des Dachs", t: "select", o: [["", "Mitte"], ...this.partOptions(obj)] },
+        { k: "pv.edge", l: "Lage am Hang", t: "select", o: [["center", "Mitte"], ["low", "unten an der Traufe"], ["high", "oben am First"]], def: "center" },
         { k: "pv.wp", l: "Leistung je Modul (Wp)", t: "number", s: 10, p: "420" }, { k: "pv.entity", l: "Leistungs-Sensor dieser Anlage", list: "ents" },
       ])}` : ""}`;
     }
@@ -502,6 +503,7 @@ class HomePlan3DView extends HTMLElement {
     side.querySelector("#grid").onchange = (e) => { this.grid = +e.target.value; };
     side.querySelector("#pent")?.addEventListener("change", (e) => (this.pendingEntity = e.target.value));
     side.querySelector("#ftype")?.addEventListener("change", (e) => (this.furnType = e.target.value));
+    if (s?.kind === "site" && obj) this.bindParts(side, obj);
     side.querySelector("#scr-edit")?.addEventListener("click", () => openScreenEditor(this, obj));
     side.querySelector("#car-edit")?.addEventListener("click", () => this.features.find((f) => f instanceof CarFeature).openCarSettings(obj));
     this.fillDevList();
@@ -532,6 +534,53 @@ class HomePlan3DView extends HTMLElement {
     side.querySelector("#imp-file").onclick = () => this.importFile();
     side.querySelector("#exp-file").onclick = () => this.exportFile();
   }
+  // ---------------------------------------------------------- parts of a shed building (garages, carport, ...)
+  siteLength(b) { return siteFrame(b.points, b.roof, this.plan.site?.north ?? 0).L; }
+  ensureParts(b) {
+    if (!b.parts && b.layout) { b.parts = partsFromLayout(this.siteLength(b), b.layout); delete b.layout; }
+    return b.parts || [];
+  }
+  partOptions(b) {
+    return this.ensureParts(b).map((p, i) => [`#${i}`, `${i + 1}. ${p.name || PART_LABELS[p.type] || p.type}`]);
+  }
+  partsHtml(b) {
+    const parts = this.ensureParts(b);
+    const types = Object.entries(PART_LABELS);
+    const rows = parts.map((p, i) => `<div class="prow" data-i="${i}">
+      <div class="l1"><select data-f="type">${types.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+        <button data-a="up" title="nach links (West)">←</button><button data-a="down" title="nach rechts (Ost)">→</button><button data-a="del" title="Teil entfernen">🗑</button></div>
+      <div class="l2">${p.type === "carport"
+        ? `<input data-f="stalls" type="number" step="1" value="${p.stalls ?? 4}" title="Stellplätze"><input data-f="stallWidth" type="number" step="0.1" value="${p.stallWidth ?? 2.9}" title="Breite je Stellplatz (m)">`
+        : `<input data-f="len" type="number" step="0.1" value="${p.len ?? ""}" placeholder="Länge: Rest" title="Länge (m), leer = Rest">`}
+        ${p.type === "garage" || p.type === "bike" ? `<input data-f="door" type="number" step="0.1" value="${p.door ?? ""}" placeholder="Tür (m)" title="Türbreite (m)">` : ""}</div></div>`).join("");
+    return `<h4>Aufteilung (West → Ost)</h4>${rows}<button class="full" id="part-add">+ Teil hinzufügen</button>
+      <div style="opacity:.6;font-size:11px;margin-top:4px">Länge leer = Rest · Gesamtlänge ${this.siteLength(b).toFixed(1)} m · Carport: Stellplätze × Breite</div>`;
+  }
+  bindParts(side, b) {
+    side.querySelectorAll(".prow").forEach((row) => {
+      const i = +row.dataset.i;
+      row.querySelectorAll("[data-f]").forEach((inp) => {
+        inp.onchange = () => {
+          this.pushUndo();
+          const p = b.parts[i], f = inp.dataset.f;
+          if (f === "type") { p.type = inp.value; if (p.type === "carport") { p.stalls ??= 4; p.stallWidth ??= 2.9; } }
+          else p[f] = inp.value === "" ? null : +inp.value;
+          this.changed({ side: f === "type" });
+        };
+      });
+      row.querySelectorAll("[data-a]").forEach((btn) => {
+        btn.onclick = () => {
+          this.pushUndo();
+          const a = btn.dataset.a;
+          if (a === "del") b.parts.splice(i, 1);
+          else { const j = a === "up" ? i - 1 : i + 1; if (j >= 0 && j < b.parts.length) [b.parts[i], b.parts[j]] = [b.parts[j], b.parts[i]]; }
+          this.changed({ side: true });
+        };
+      });
+    });
+    side.querySelector("#part-add")?.addEventListener("click", () => { this.pushUndo(); (b.parts ||= []).push({ type: "garage", len: null }); this.changed({ side: true }); });
+  }
+
   fillDevList() {
     const box = this.$("#devlist");
     if (!box) return;
@@ -1231,7 +1280,7 @@ class HomePlan3DView extends HTMLElement {
           const fr = siteFrame(b.points, b.roof, this.plan.site?.north ?? 0);
           x.setLineDash([]);
           x.strokeStyle = "#ffb347"; x.lineWidth = dpr;
-          (layoutParts(fr.L, b.layout) || []).forEach((pt) => {
+          (resolveParts(fr.L, b) || []).forEach((pt) => {
             const carport = pt.type === "carport";
             const n = carport ? pt.stalls : 1;
             for (let k = 0; k <= n; k++) {
