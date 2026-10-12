@@ -19,13 +19,18 @@ export class EnergyFeature extends Feature {
   get usesHolo() { return true; }
   get settingsLabel() { return "⚡ Energie"; }
   cfg() { return { hide_below_w: 5, device_cards: true, ...(this.settings.energy || {}) }; }
-  effective() { const c = this.cfg(); return { ...c, solar: c.solar || this.pvEntity || null }; }
+  effective() { const c = this.cfg(); return { ...c, solar: c.solar || this.pvEntity || null, consumption: c.consumption || this.meterPower || null }; }
   available() { const c = this.effective(); return !!(c.solar || c.grid || c.battery || c.consumption); }
 
   // ---------------------------------------------------------- scene
   build(anchors) {
     this.anchors = anchors;
     this.pvEntity = anchors.pv.find((p) => p.entity)?.entity || null;
+    this.meterPower = anchors.furniture.find((a) => a.f.type === "meter" && a.f.power)?.f.power || null; // the meter's power sensor = house consumption
+    // arrays with their own power sensor are the live ones; without any, all arrays share the solar sensor
+    const own = anchors.pv.some((p) => p.entity);
+    const live = anchors.pv.filter((p) => !own || p.entity);
+    const where = (p) => p.pos || p.mesh.position;
     const fur = (type) => anchors.furniture.find((a) => a.f.type === type);
     const nodeOf = (a) => (a ? V(a.x, (a.y + a.top) / 2, a.z) : null);
 
@@ -37,13 +42,13 @@ export class EnergyFeature extends Feature {
     this.nodes = { house: nodeOf(meter) || centre };
     const ext = this.view.extent() || [0, 0, 10, 10];
     this.nodes.grid = nodeOf(gridPt) || V(ext[0] - 4, 1, (ext[1] + ext[3]) / 2);
-    if (anchors.pv.length) {
-      const c = anchors.pv.reduce((s, p) => s.add(p.mesh.position), V(0, 0, 0)).multiplyScalar(1 / anchors.pv.length);
+    if (live.length) {
+      const c = live.reduce((s, p) => s.add(where(p)), V(0, 0, 0)).multiplyScalar(1 / live.length);
       this.nodes.solar = c.add(V(0, 0.25, 0));
     } else this.nodes.solar = nodeOf(fur("inverter"));
     this.nodes.battery = nodeOf(fur("battery"));
     this.nodes.wallbox = nodeOf(fur("wallbox"));
-    const top = Math.max(...anchors.rooms.map((r) => r.elev + 2.8), ...anchors.pv.map((p) => p.mesh.position.y), 3);
+    const top = Math.max(...anchors.rooms.map((r) => r.elev + 2.8), ...live.map((p) => where(p).y), 3);
     this.nodes.holo = V(this.nodes.house.x, top + 1.4, this.nodes.house.z);
 
     // cables
@@ -77,9 +82,9 @@ export class EnergyFeature extends Feature {
       t.wrapT = THREE.RepeatWrapping;
       return t;
     })();
-    this.pvMats = [...new Set(anchors.pv.map((p) => p.mat))];
+    this.pvMats = [...new Set(live.map((p) => p.mat))];
     this.pvMats.forEach((m) => { m.emissiveMap = this.pvTex; m.emissive.set(0xffffff); m.emissiveIntensity = 0.12; m.needsUpdate = true; });
-    this.pvWp = anchors.pv.reduce((s, p) => s + (p.wp || 400), 0) || 400;
+    this.pvWp = live.reduce((s, p) => s + (p.wp || 400), 0) || 400;
     this.level = 0;
 
     // hologram card
@@ -180,7 +185,7 @@ export class EnergyFeature extends Feature {
     const rows = [];
     if (p.solar != null || this.pvEntity) rows.push(row("☀", "PV", fmtPower(f.S), this.yieldKwh != null ? `heute ${this.yieldKwh.toFixed(1).replace(".", ",")} kWh` : ""));
     rows.push(row("🏠", "Haus", fmtPower(f.H)));
-    if (p.grid != null) rows.push(row("🔌", "Netz", fmtPower(Math.abs(f.g)), f.g > 10 ? "Bezug" : f.g < -10 ? "Einspeisung" : ""));
+    if (p.grid != null || p.consumption != null) rows.push(row("🔌", "Netz", fmtPower(Math.abs(f.g)), f.g > 10 ? "Bezug" : f.g < -10 ? "Einspeisung" : ""));
     if (p.battery != null || p.soc != null) rows.push(row("🔋", p.soc != null ? `${Math.round(p.soc)} %` : "Akku", fmtPower(Math.abs(f.b)), f.b > 10 ? "entlädt" : f.b < -10 ? "lädt" : ""));
     if (p.wallbox != null && p.wallbox > 10) rows.push(row("🚗", "Wallbox", fmtPower(p.wallbox)));
     if (f.H > 0) rows.push(row("🌱", "Autarkie", `${Math.round(f.autarky * 100)} %`));

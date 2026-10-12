@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createFeatures } from "./features/index.js";
 import { openScreenEditor } from "./features/screens-ui.js";
+import { siteFrame, localToPlan, layoutParts } from "./lib/site.js";
 import { CarFeature } from "./features/car.js";
 import { uid, snap, domainOf, clone, inPoly, bbox, distSeg, polyArea, labelPoint, furnitureCorners, rad } from "./util.js";
 import { newFloor, emptyPlan, normalizePlan, elevation, wallNetwork, roofSections, newSiteBuilding, applyLevels } from "./plan.js";
@@ -460,9 +461,18 @@ class HomePlan3DView extends HTMLElement {
       obj = find(this.plan.site?.buildings || [], s.id);
       if (obj) selHtml += `<h4>Gebäude</h4>${this.formHtml(obj, [
         { k: "name", l: "Name" }, { k: "levels", l: "Geschosse (richten sich nach den Haus-Etagen)", t: "number", s: 1, p: "1" }, { k: "height", l: "Traufhöhe (m)", t: "number", s: 0.1 },
-        { k: "roof.type", l: "Dach", t: "select", o: [["flat", "Flach"], ["gable", "Satteldach"]] }, { k: "roof.pitch", l: "Neigung (°)", t: "number", s: 1 },
+        { k: "roof.type", l: "Dach", t: "select", o: [["flat", "Flach"], ["gable", "Satteldach"], ["shed", "Pultdach"]] }, { k: "roof.pitch", l: "Neigung (°)", t: "number", s: 1 },
+        ...(obj.roof?.type === "shed" ? [{ k: "roof.high", l: "Hohe Seite (zum Nachbarn)", t: "select", o: [["south", "Süd"], ["north", "Nord"], ["east", "Ost"], ["west", "West"]], def: "south" }] : []),
         { k: "visible", l: "Sichtbar", t: "checkbox" },
-      ])}`;
+      ])}${obj.roof?.type === "shed" ? `<h4>Aufteilung</h4>${this.formHtml(obj, [
+        { k: "layout.garage", l: "Garage", t: "select", o: [["", "keine Aufteilung"], ["west", "links (West, Straße)"], ["east", "rechts (Ost)"], ["none", "keine Garage, nur Carport"]] },
+        { k: "layout.carportStalls", l: "Carport-Stellplätze", t: "number", s: 1 }, { k: "layout.stallWidth", l: "Breite je Stellplatz (m)", t: "number", s: 0.1 },
+        { k: "layout.garageLen", l: "Garagenlänge (m, leer = Rest)", t: "number", s: 0.1 },
+      ])}<h4>Photovoltaik auf dem Dach</h4>${this.formHtml(obj, [
+        { k: "pv.enabled", l: "PV-Module auf dem Dach", t: "checkbox" }, { k: "pv.fill", l: "Dachfläche füllen", t: "checkbox", def: true },
+        { k: "pv.portrait", l: "Module hochkant", t: "checkbox" }, { k: "pv.rows", l: "Reihen (ohne Füllen)", t: "number", s: 1 }, { k: "pv.cols", l: "Module je Reihe (ohne Füllen)", t: "number", s: 1 },
+        { k: "pv.wp", l: "Leistung je Modul (Wp)", t: "number", s: 10, p: "420" }, { k: "pv.entity", l: "Leistungs-Sensor dieser Anlage", list: "ents" },
+      ])}` : ""}`;
     }
 
     if (selHtml) html += `<div data-obj="sel">${selHtml}</div>`;
@@ -1217,6 +1227,25 @@ class HomePlan3DView extends HTMLElement {
         x.fillStyle = "#ffb347"; x.font = `${12 * dpr}px sans-serif`; x.textAlign = "center";
         x.fillText(`${b.name} (${polyArea(b.points).toFixed(0)} m²${b.levels > 1 ? `, ${b.levels} Geschosse` : ""})`, lp[0], lp[1]);
         if (sel) b.points.forEach((p) => { const q = this.w2s(p); x.fillStyle = "#fff"; x.fillRect(q[0] - 4 * dpr, q[1] - 4 * dpr, 8 * dpr, 8 * dpr); });
+        if (b.roof?.type === "shed") {
+          const fr = siteFrame(b.points, b.roof, this.plan.site?.north ?? 0);
+          x.setLineDash([]);
+          x.strokeStyle = "#ffb347"; x.lineWidth = dpr;
+          (layoutParts(fr.L, b.layout) || []).forEach((pt) => {
+            const carport = pt.type === "carport";
+            const n = carport ? pt.stalls : 1;
+            for (let k = 0; k <= n; k++) {
+              const t = pt.t0 + (k * (pt.t1 - pt.t0)) / n;
+              const a = w2s(localToPlan(fr, fr.tToU(t), -fr.W / 2)), c2 = w2s(localToPlan(fr, fr.tToU(t), fr.W / 2));
+              x.beginPath(); x.moveTo(...a); x.lineTo(...c2); x.stroke();
+            }
+          });
+          // high side marker: small triangles along the edge
+          const mid = w2s(localToPlan(fr, 0, -fr.W / 2 + 0.25));
+          x.fillStyle = "#ffb347"; x.font = `${10 * dpr}px sans-serif`; x.textAlign = "center";
+          x.fillText("▲ hoch", mid[0], mid[1]);
+          x.setLineDash([8 * dpr, 5 * dpr]);
+        }
       });
       if (this.plan.site?.cadastreHouse) { this.path(x, this.plan.site.cadastreHouse, true); x.strokeStyle = "#3ddc84"; x.lineWidth = 1.5 * dpr; x.stroke(); }
       x.setLineDash([]);

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { elevation, wallNetwork, hostSegment, roofHeightAt, roofSections, roofGeom, stairHoles, isStairs, DEFAULTS } from "./plan.js";
 import { labelPoint, rad, domainOf, inPoly, bbox } from "./util.js";
+import { siteFrame, localToPlan, layoutParts, pvGrid } from "./lib/site.js";
 
 export const THEMES = {
   neon: { bg: 0x07080f, wall: 0x19e6ff, wallOp: 0.2, edgeOp: 0.85, floorK: 0.25, floorEm: 0.14, door: 0xff2bd6, win: 0x6fa8ff, roof: 0xff9a3c, text: "#dfe8ff", glow: "#19e6ff" },
@@ -369,6 +370,132 @@ export function buildRoof(plan, ctx) {
   return group;
 }
 
+
+// -------------------------------------------------------------- shed-roof building (garage / carport) with PV
+/**
+ * A building with a shed roof (Pultdach). Optionally split along its long side into garage, open bay and
+ * carport stalls, and covered with PV modules. Built in a local frame (see lib/site.js).
+ */
+function buildShedBuilding(plan, b, ctx, opts, m) {
+  const g = new THREE.Group();
+  const north = plan.site?.north ?? plan.settings?.north ?? 0;
+  const roof = b.roof || {};
+  const f = siteFrame(b.points, roof, north);
+  const pitch = rad(roof.pitch ?? 12), tan = Math.tan(pitch);
+  const hLow = b.height || 2.8, L = f.L, W = f.W, ov = roof.overhang ?? 0.3;
+  const hHigh = hLow + W * tan;
+  const yAt = (z) => hLow + (W / 2 - z) * tan; // local z: -W/2 = high side, +W/2 = low side
+  const fg = new THREE.Group();
+  fg.position.set(f.cx, 0, f.cz);
+  fg.rotation.y = f.theta;
+  g.add(fg);
+
+  // roof surface
+  const xs = L / 2 + ov, zH = -W / 2 - ov, zL = W / 2 + ov;
+  const rg = new THREE.BufferGeometry();
+  rg.setAttribute("position", new THREE.Float32BufferAttribute([-xs, yAt(zH), zH, xs, yAt(zH), zH, xs, yAt(zL), zL, -xs, yAt(zL), zL], 3));
+  rg.setIndex([0, 1, 2, 0, 2, 3]);
+  rg.computeVertexNormals();
+  const roofMesh = new THREE.Mesh(rg, m.roofMats.surf);
+  roofMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(rg, 5), m.lineMat));
+  roofMesh.renderOrder = 2;
+  fg.add(roofMesh);
+
+  const labelAt = (text, u, w, y) => {
+    if (!opts.label) return;
+    const sp = opts.label(text, ctx.theme);
+    const p = localToPlan(f, u, w);
+    sp.position.set(p[0], y, p[1]);
+    g.add(sp);
+  };
+
+  const parts = layoutParts(L, b.layout) || [{ type: "solid", t0: 0, t1: L }];
+  parts.forEach((pt) => {
+    const u0 = Math.min(f.tToU(pt.t0), f.tToU(pt.t1)), u1 = Math.max(f.tToU(pt.t0), f.tToU(pt.t1)), len = u1 - u0, uc = (u0 + u1) / 2;
+    if (pt.type === "garage" || pt.type === "solid") {
+      // wedge prism under the sloped roof: side profile (z, y) extruded along the long side
+      const sh = new THREE.Shape([new THREE.Vector2(-W / 2, 0), new THREE.Vector2(W / 2, 0), new THREE.Vector2(W / 2, hLow), new THREE.Vector2(-W / 2, hHigh)]);
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false });
+      geo.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1)); // (x,y,z) -> (z,y,x)
+      geo.translate(u0, 0, 0);
+      const mesh = new THREE.Mesh(geo, m.wallMat);
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), m.lineMat));
+      mesh.userData = { site: b.id };
+      mesh.renderOrder = 1;
+      fg.add(mesh);
+      ctx.pickables.push(mesh);
+      if (pt.type === "garage" && b.layout) {
+        // garage door on the low side
+        const dw = Math.min(2.6, len * 0.6), dh = Math.min(2.2, hLow - 0.2);
+        const door = new THREE.Mesh(new THREE.BoxGeometry(dw, dh, 0.05), new THREE.MeshStandardMaterial({ color: 0xff2bd6, emissive: 0xff2bd6, emissiveIntensity: 0.5, transparent: true, opacity: 0.5, depthWrite: false }));
+        door.position.set(uc, dh / 2, W / 2 + 0.03);
+        door.add(new THREE.LineSegments(new THREE.EdgesGeometry(door.geometry), new THREE.LineBasicMaterial({ color: 0xff2bd6 })));
+        fg.add(door);
+      }
+      labelAt(pt.type === "garage" ? "Garage" : b.name || "", uc, 0, 0.06);
+    } else {
+      // carport / open bay: back wall on the high side, posts, floor marks
+      const back = new THREE.BoxGeometry(len, hHigh, 0.1);
+      const bw = new THREE.Mesh(back, m.wallMat);
+      bw.position.set(uc, hHigh / 2, -W / 2 + 0.05);
+      bw.add(new THREE.LineSegments(new THREE.EdgesGeometry(back), m.lineMat));
+      bw.userData = { site: b.id };
+      fg.add(bw);
+      ctx.pickables.push(bw);
+      const n = pt.type === "carport" ? pt.stalls : 1;
+      const w = len / n;
+      const marks = [];
+      for (let k = 0; k <= n; k++) {
+        const u = u0 + k * w;
+        const post = (z, h) => {
+          const pm = new THREE.Mesh(new THREE.BoxGeometry(0.14, h, 0.14), m.wallMat);
+          pm.position.set(u, h / 2, z);
+          pm.add(new THREE.LineSegments(new THREE.EdgesGeometry(pm.geometry), m.lineMat));
+          fg.add(pm);
+        };
+        post(W / 2 - 0.08, hLow);
+        post(-W / 2 + 0.08, hHigh);
+        marks.push(new THREE.Vector3(u, 0.03, -W / 2), new THREE.Vector3(u, 0.03, W / 2));
+      }
+      if (pt.type === "carport") fg.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(marks), new THREE.LineBasicMaterial({ color: m.col, transparent: true, opacity: 0.8 })));
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(len, W), new THREE.MeshBasicMaterial({ color: m.col, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(uc, 0.02, 0);
+      fg.add(floor);
+      if (pt.type === "carport") for (let k = 0; k < n; k++) labelAt(String(k + 1), u0 + (k + 0.5) * w, 0, 0.05);
+    }
+  });
+  if (b.layout && parts.some((p) => p.type === "carport")) {
+    const c = parts.find((p) => p.type === "carport");
+    labelAt(`Carport · ${c.stalls} Stellplätze`, f.tToU((c.t0 + c.t1) / 2), W / 2 + 0.9, 0.06);
+  }
+
+  // PV modules on the roof
+  const pv = b.pv;
+  if (pv && pv.enabled !== false) {
+    const grid = pvGrid({ L, W, pitchDeg: roof.pitch ?? 12, portrait: !!pv.portrait, fill: pv.fill !== false, rows: pv.rows, cols: pv.cols });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x0b1530, emissive: 0x1f6bff, emissiveIntensity: 0.15, metalness: 0.4, roughness: 0.3 });
+    const line = new THREE.LineBasicMaterial({ color: 0x5aa0ff });
+    const cos = Math.cos(pitch), sin = Math.sin(pitch);
+    fg.updateMatrixWorld(true);
+    grid.modules.forEach((q) => {
+      const z = W / 2 - q.s * cos + 0.06 * sin;
+      const y = hLow + q.s * sin + 0.06 * cos;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(q.mw, 0.04, q.mh), mat);
+      mesh.position.set(q.u, y, z);
+      mesh.rotation.x = pitch; // plane falls towards +z (the low side)
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), line));
+      fg.add(mesh);
+      const world = new THREE.Vector3();
+      fg.updateMatrixWorld(true);
+      mesh.updateWorldMatrix(true, false);
+      mesh.getWorldPosition(world);
+      ctx.anchors.pv.push({ mesh, mat, entity: pv.entity || null, wp: pv.wp || 420, pos: world, site: b.id });
+    });
+  }
+  return g;
+}
+
 // -------------------------------------------------------------- site (other buildings on the parcel)
 export function buildSite(plan, ctx, opts = {}) {
   const group = new THREE.Group();
@@ -384,6 +511,10 @@ export function buildSite(plan, ctx, opts = {}) {
   };
   buildings.forEach((b) => {
     if (b.visible === false || !b.points || b.points.length < 3) return;
+    if (b.roof?.type === "shed" || b.layout) {
+      group.add(buildShedBuilding(plan, b, ctx, opts, { wallMat, lineMat, roofMats, col }));
+      return;
+    }
     const h = b.height || 3;
     const geo = new THREE.ExtrudeGeometry(new THREE.Shape(b.points.map((p) => new THREE.Vector2(p[0], -p[1]))), { depth: h, bevelEnabled: false, curveSegments: 1 });
     const prism = new THREE.Mesh(geo, wallMat);

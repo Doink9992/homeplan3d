@@ -78,3 +78,12 @@ test("energy dashboard preferences give power sensors", () => {
   assert.deepEqual(p, { grid: "sensor.grid_w", solar: "sensor.pv_w", battery: "sensor.bat_w" });
   assert.deepEqual(parseEnergyPrefs({ energy_sources: [{ type: "solar", stat_energy_from: "sensor.x" }] }), {});
 });
+
+test("grid flow is derived from consumption when there is no grid sensor", () => {
+  const f = computeFlows({ solar: 265, grid: null, battery: null, consumption: 1500 });
+  assert.equal(f.g, 1235);
+  assert.equal(f.g2h, 1235);
+  const e = computeFlows({ solar: 2000, grid: null, battery: null, consumption: 500 });
+  assert.equal(e.g, -1500);
+  assert.equal(e.s2g, 1500);
+});

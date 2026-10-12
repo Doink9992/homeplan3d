@@ -561,11 +561,11 @@
    },
    {
     "id": "carport",
-    "name": "Carport",
+    "name": "Garage + Carport",
     "visible": true,
     "points": [
      [
-      -6,
+      -13.5,
       1
      ],
      [
@@ -574,18 +574,31 @@
      ],
      [
       -1.2,
-      6
+      4
      ],
      [
-      -6,
-      6
+      -13.5,
+      4
      ]
     ],
-    "height": 2.5,
+    "height": 2.6,
     "roof": {
-     "type": "flat",
-     "pitch": 0,
-     "overhang": 0
+     "type": "shed",
+     "pitch": 12,
+     "overhang": 0.3,
+     "high": "north"
+    },
+    "layout": {
+     "garage": "west",
+     "carportStalls": 4,
+     "stallWidth": 2.9
+    },
+    "pv": {
+     "enabled": true,
+     "fill": true,
+     "portrait": false,
+     "wp": 420,
+     "entity": null
     }
    }
   ]

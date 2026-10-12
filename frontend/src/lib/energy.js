@@ -30,8 +30,9 @@ export function readPowers(cfg, states) {
 /** Flows between the nodes plus a few derived numbers. Missing values count as zero. */
 export function computeFlows(p) {
   const S = Math.max(0, p.solar ?? 0);
-  const g = p.grid ?? 0;
   const b = p.battery ?? 0;
+  // without a grid sensor the grid flow follows from house consumption, solar and battery
+  const g = p.grid ?? (p.consumption != null ? p.consumption - S - b : 0);
   const H = p.consumption != null ? Math.max(0, p.consumption) : Math.max(0, S + g + b);
   const charge = Math.max(0, -b);
   const discharge = Math.max(0, b);
