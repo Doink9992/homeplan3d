@@ -206,13 +206,14 @@ export function hostSegment(o, segs) {
 export const isStairs = (f) => f.type === "stairs" || f.type === "stairs_u";
 
 /**
- * Outline of the floor opening a stair needs: its footprint, or for the U with two landings everything except the
- * front arm (where the stair starts): the floor stays closed there, so there is a way over the stair start to the door.
+ * Outline of the floor opening a stair needs: its footprint, or for the U with two landings only the back half:
+ * the floor stays closed from the front (where the stair starts) up to the middle, so there is a way over the
+ * stair start to the door.
  */
 export function stairOpening(f) {
   if (f.type !== "stairs_u" || f.landings !== 2) return furnitureCorners(f);
-  const w = f.w || 1.9, d = f.d || 3.2, aw = Math.min(1.2, w / 3, d / 3);
-  return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2 - aw], [-w / 2, d / 2 - aw]].map(([x, z]) => localToWorld(f, x, z));
+  const w = f.w || 1.9, d = f.d || 3.2;
+  return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, 0], [-w / 2, 0]].map(([x, z]) => localToWorld(f, x, z));
 }
 
 /** Floor openings (polygons) in floor i where stairs from lower floors arrive. */
