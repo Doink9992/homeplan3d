@@ -1389,6 +1389,11 @@ class HomePlan3DView extends HTMLElement {
           x.setLineDash([8 * dpr, 5 * dpr]);
         }
       });
+      if (this.plan.site?.yard?.points?.length > 2) {
+        this.path(x, this.plan.site.yard.points, true);
+        x.fillStyle = "rgba(170,175,190,.08)"; x.fill();
+        x.setLineDash([3 * dpr, 5 * dpr]); x.strokeStyle = "rgba(170,175,190,.5)"; x.lineWidth = dpr; x.stroke(); x.setLineDash([]);
+      }
       (this.plan.site?.decks || []).forEach((d) => {
         if (!d.points?.length) return;
         this.path(x, d.points, true);

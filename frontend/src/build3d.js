@@ -569,12 +569,63 @@ function buildShedBuilding(plan, b, ctx, opts, m) {
   return g;
 }
 
+// -------------------------------------------------------------- yard floor (cobblestones)
+const cobbleCache = {};
+/** Seamless cobblestone texture for 2 x 2 m: rounded stones in staggered rows, dark joints with a little moss. */
+function cobbleTexture(day) {
+  const key = day ? "day" : "neon";
+  if (cobbleCache[key]) return cobbleCache[key];
+  const S = 512, rows = 14, cols = 14, cw = S / cols, rh = S / rows;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const x = c.getContext("2d");
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  x.fillStyle = day ? "#5d6155" : "#1c2230";
+  x.fillRect(0, 0, S, S);
+  for (let r = 0; r < rows; r++) {
+    for (let k = 0; k < cols; k++) {
+      const cx = (k + 0.5 + (r % 2 ? 0.5 : 0)) * cw + (rnd() - 0.5) * 5, cy = (r + 0.5) * rh + (rnd() - 0.5) * 5;
+      const g = (day ? 120 : 98) + Math.floor(rnd() * (day ? 70 : 56)), warm = Math.floor(rnd() * 14), moss = rnd() < 0.08;
+      const rx = cw * (0.4 + rnd() * 0.07), ry = rh * (0.4 + rnd() * 0.07);
+      for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { // wrap around the edges so the tile is seamless
+        const px = cx + ox, py = cy + oy;
+        if (px < -cw || px > S + cw || py < -rh || py > S + rh) continue;
+        x.beginPath();
+        x.ellipse(px, py, rx, ry, (rnd() - 0.5) * 0.4, 0, Math.PI * 2);
+        const grad = x.createRadialGradient(px - rx * 0.3, py - ry * 0.3, 1, px, py, Math.max(rx, ry));
+        grad.addColorStop(0, `rgb(${g + 22 + warm},${g + 20},${g + 16})`);
+        grad.addColorStop(1, moss ? `rgb(${g - 30},${g - 5},${g - 35})` : `rgb(${g - 22 + warm},${g - 22},${g - 26})`);
+        x.fillStyle = grad;
+        x.fill();
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(0.5, 0.5); // shape units are metres: one tile per 2 m
+  tex.anisotropy = 4;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return (cobbleCache[key] = tex);
+}
+
 // -------------------------------------------------------------- site (other buildings on the parcel)
 export function buildSite(plan, ctx, opts = {}) {
   const group = new THREE.Group();
   const buildings = plan.site?.buildings || [];
-  if (!buildings.length && !plan.site?.decks?.length) return group;
+  if (!buildings.length && !plan.site?.decks?.length && !plan.site?.yard) return group;
   const day = ctx.theme === "day";
+  // the yard floor: site.yard = { points: [[x, z] ...] } covered with cobblestones, on the yard level
+  const yard = plan.site?.yard;
+  if (yard?.points?.length > 2) {
+    const ys = new THREE.Shape(yard.points.map((p) => new THREE.Vector2(p[0], -p[1])));
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(ys), new THREE.MeshStandardMaterial({ map: cobbleTexture(day), color: day ? 0xffffff : 0xb8c0d4, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
+    mesh.rotation.x = -Math.PI / 2; // shape (x, -z) -> world (x, up, z)
+    mesh.position.y = (plan.site?.groundY ?? 0) - 0.012;
+    mesh.userData = { yard: true };
+    mesh.renderOrder = 0;
+    group.add(mesh);
+  }
   const col = day ? 0xd8c3a5 : 0xffb347;
   const wallMat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: day ? 0 : 0.18, transparent: true, opacity: day ? 0.95 : 0.22, depthWrite: false, side: THREE.DoubleSide });
   const lineMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
