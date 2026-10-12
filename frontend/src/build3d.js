@@ -19,7 +19,7 @@ const COL = {
   tv: "#5a6bff", monitor: "#5a6bff", speaker: "#ff2bd6", soundbar: "#ff2bd6", car: "#9aa5c0", battery: "#7bd88f", wallbox: "#19e6ff",
 };
 const DIM = {
-  stairs: [1, 3.2, 2.75], stairs_u: [1.9, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02],
+  bin: [0.58, 0.72, 1.07], stairs: [1, 3.2, 2.75], stairs_u: [1.9, 3.2, 2.75], bed: [1.8, 2, 0.5], table: [1.6, 0.9, 0.75], chair: [0.45, 0.45, 0.9], stool: [0.35, 0.35, 0.45], rug: [2, 3, 0.02],
   tv: [1.2, 0.06, 0.7], monitor: [0.6, 0.05, 0.36], speaker: [0.22, 0.22, 0.32], soundbar: [0.9, 0.09, 0.07], car: [1.9, 4.6, 1.5], battery: [0.6, 0.25, 1.1], wallbox: [0.25, 0.12, 0.35],
 };
 const MOUNT = { kitchen_wall: 1.4, tv: 0.8, monitor: 0.74, soundbar: 0.45 };
@@ -92,6 +92,12 @@ function buildFurniture(f, elev, ctx) {
   };
 
   switch (f.type) {
+    case "bin": {
+      // wheelie bin: body and a slightly wider lid (colour = the lid / body colour of the bin)
+      add(box(w, h - 0.06, d, 0.04));
+      add(box(w + 0.04, 0.06, d + 0.04, h - 0.06));
+      break;
+    }
     case "stairs_u": {
       if (f.landings === 2) {
         // U opening to the west with two landings: the lower flight runs east along the front (+z) arm, landing in the
