@@ -67,8 +67,9 @@ def component_polygon(mask, seed, eps=3.0, rect_ratio=0.9):
 
 
 def extend_ends(poly, ext):
-    """Move the short ends of a long building to given positions along its long axis (plan x, west < east):
-    ext = {"westTo": x, "eastTo": x}. The vertices at that end land on one line, i.e. the end becomes flat."""
+    """Move the short ends of a building that runs along plan x to given plan x coordinates (west < east):
+    ext = {"westTo": x, "eastTo": x}. The vertices at that end slide along the long axis until they reach x,
+    so the end becomes flat (e.g. flush with the main building's west wall)."""
     P = np.array(poly, float)
     edges = [P[(i + 1) % len(P)] - P[i] for i in range(len(P))]
     d = max(edges, key=lambda e: float(np.hypot(*e)))
@@ -79,7 +80,7 @@ def extend_ends(poly, ext):
     lo, hi, tol = a.min(), a.max(), 0.8
     for key, sel in (("westTo", a < lo + tol), ("eastTo", a > hi - tol)):
         if ext.get(key) is not None:
-            P[sel] += np.outer(float(ext[key]) - a[sel], d)
+            P[sel] += np.outer((float(ext[key]) - P[sel, 0]) / d[0], d)
     return [[round(float(x), 2), round(float(z), 2)] for x, z in P]
 
 
