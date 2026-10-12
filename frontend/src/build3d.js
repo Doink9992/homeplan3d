@@ -618,8 +618,39 @@ export function buildSite(plan, ctx, opts = {}) {
   // the yard floor: site.yard = { points: [[x, z] ...] } covered with cobblestones, on the yard level
   const yard = plan.site?.yard;
   if (yard?.points?.length > 2) {
-    const ys = new THREE.Shape(yard.points.map((p) => new THREE.Vector2(p[0], -p[1])));
-    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(ys), new THREE.MeshStandardMaterial({ map: cobbleTexture(day), color: day ? 0xffffff : 0xb8c0d4, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
+    // pits (yard.pits: { points, y, openEdges? }, e.g. a stairwell down to a cellar door) are cut out of the floor and get their own floor and walls
+    const pits = (yard.pits || []).filter((p) => p.points?.length > 2);
+    const toS = (ring, hs = []) => {
+      const s = new THREE.Shape(ring.map((p) => new THREE.Vector2(p[0], -p[1])));
+      hs.forEach((h) => s.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(p[0], -p[1])))));
+      return s;
+    };
+    const groundY0 = plan.site?.groundY ?? 0;
+    pits.forEach((pit) => {
+      const py = pit.y ?? groundY0 - 0.6;
+      const floor = new THREE.Mesh(new THREE.ShapeGeometry(toS(pit.points)), new THREE.MeshStandardMaterial({ color: day ? 0x8a8f99 : 0x39435a, emissive: day ? 0 : 0x0a0f1c, roughness: 1, side: THREE.DoubleSide }));
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = py - 0.01;
+      group.add(floor);
+      const wallPts = [], skip = pit.openEdges || [];
+      pit.points.forEach((p, i) => {
+        if (skip.includes(i)) return;
+        const q = pit.points[(i + 1) % pit.points.length];
+        wallPts.push(p[0], py, p[1], q[0], py, q[1], q[0], groundY0, q[1], p[0], py, p[1], q[0], groundY0, q[1], p[0], groundY0, p[1]);
+      });
+      if (wallPts.length) {
+        const wg = new THREE.BufferGeometry();
+        wg.setAttribute("position", new THREE.Float32BufferAttribute(wallPts, 3));
+        wg.computeVertexNormals();
+        const pcol = day ? 0xd8c3a5 : 0xffb347; // same colour as the other site buildings
+        const wm = new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: pcol, emissive: pcol, emissiveIntensity: day ? 0 : 0.2, transparent: true, opacity: day ? 0.9 : 0.3, side: THREE.DoubleSide, depthWrite: false }));
+        wm.add(new THREE.LineSegments(new THREE.EdgesGeometry(wg, 20), new THREE.LineBasicMaterial({ color: pcol, transparent: true, opacity: 0.9 })));
+        group.add(wm);
+      }
+    });
+    const cut = pits.length ? polygonClipping.difference([[yard.points.map((p) => [p[0], p[1]])]], ...pits.map((p) => [[p.points.map((q) => [q[0], q[1]])]])) : null;
+    const shapes = cut ? cut.map((poly) => toS(poly[0], poly.slice(1))) : [toS(yard.points)];
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shapes), new THREE.MeshStandardMaterial({ map: cobbleTexture(day), color: day ? 0xffffff : 0xb8c0d4, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
     mesh.rotation.x = -Math.PI / 2; // shape (x, -z) -> world (x, up, z)
     mesh.position.y = (plan.site?.groundY ?? 0) - 0.012;
     mesh.userData = { yard: true };
