@@ -849,7 +849,14 @@ class HomePlan3DView extends HTMLElement {
     if (!this.camera || !this.controls) return;
     let pts;
     if (i == null) { const bb = this.extent(); if (!bb) return; pts = [[bb[0], bb[1]], [bb[2], bb[3]]]; }
-    else { const fl = this.plan.floors[i]; pts = fl?.rooms.flatMap((r) => r.points); if (!pts?.length) return; }
+    else {
+      const fl = this.plan.floors[i];
+      if (!fl?.rooms.length) return;
+      // rooms inside an annex (site building, e.g. a wellness room in the Anbau) do not count: zoom on the house itself
+      const inAnnex = (r) => (this.plan.site?.buildings || []).some((b) => b.points?.length > 2 && r.points.every((p) => inPoly(p, b.points)));
+      const own = fl.rooms.filter((r) => !inAnnex(r));
+      pts = (own.length ? own : fl.rooms).flatMap((r) => r.points);
+    }
     const [x0, z0, x1, z1] = bbox(pts);
     const size = Math.max(x1 - x0, z1 - z0, 4);
     const elev = i == null ? elevation(this.plan, this.plan.floors.length - 1) / 2 : elevation(this.plan, i) + (this.plan.floors[i].height || 2.6) / 2;
