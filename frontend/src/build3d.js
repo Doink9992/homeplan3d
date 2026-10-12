@@ -59,10 +59,11 @@ function box(w, h, d, y0 = 0, x0 = 0, z0 = 0) {
 function buildFurniture(f, elev, ctx) {
   const dim = DIM[f.type] || [0.6, 0.6, 0.8];
   const w = f.w || dim[0], d = f.d || dim[1], h = f.h || dim[2];
-  const col = new THREE.Color(COL[f.type] || "#9aa5c0");
+  const col = new THREE.Color(f.color || COL[f.type] || "#9aa5c0");
   const dark = ctx.theme === "day" ? 1 : 0.5;
-  const mat = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(dark), emissive: col, emissiveIntensity: ctx.theme === "day" ? 0 : 0.18, transparent: true, opacity: ctx.theme === "day" ? 1 : 0.88 });
-  const lineMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
+  const mat = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(f.color ? 1 : dark), emissive: col, emissiveIntensity: ctx.theme === "day" ? 0 : f.color ? 0.3 : 0.18, transparent: true, opacity: ctx.theme === "day" ? 1 : 0.88 });
+  // own colours (a black car) would vanish on the dark background: lighten the outline
+  const lineMat = new THREE.LineBasicMaterial({ color: f.color ? col.clone().lerp(new THREE.Color(0xffffff), 0.4) : col, transparent: true, opacity: 0.9 });
   const y0 = f.mountY ?? MOUNT[f.type] ?? 0;
   const geos = [];
   const mats = [mat];
@@ -144,6 +145,14 @@ function buildFurniture(f, elev, ctx) {
       band.position.set(0, 0.1, 0);
       g.add(band);
       ctx.anchors.cars.push({ f, band: bandMat, group: g, floor: ctx.cur.i, w, d, h });
+      if (f.name && !f.car) {
+        // parked car without a vehicle integration: just show what it is
+        const sp = valueSprite();
+        setSprite(sp, f.name);
+        sp.visible = true;
+        sp.position.set(0, h + 0.45, 0);
+        g.add(sp);
+      }
       break;
     }
     default:
@@ -673,7 +682,7 @@ export function buildBuilding(plan, opts) {
     // devices
     opts.devicesFor(fl).forEach((d) => {
       const dom = domainOf(d.entity);
-      const y = d.y ?? (dom === "light" ? fl.height - 0.4 : 0.9);
+      const y = d.y ?? (dom === "light" ? fl.height - 0.4 : dom === "camera" ? Math.min(2.4, fl.height - 0.25) : 0.9);
       const geo = dom === "light" ? new THREE.SphereGeometry(0.14, 16, 12) : dom === "cover" ? new THREE.BoxGeometry(0.5, 0.08, 0.08) : new THREE.BoxGeometry(0.22, 0.22, 0.22);
       const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x444a66, emissive: 0x000000 }));
       mesh.position.set(d.x, y, d.z);

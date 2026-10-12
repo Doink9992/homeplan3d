@@ -284,7 +284,11 @@ export class CameraFeature extends Feature {
     const dev = a.devices.find((d) => d.entity === entity);
     if (dev) return V(dev.x, dev.y, dev.z);
     const cam = this.cams.find((c) => this.siblings(c).some((s) => s.entity === entity));
-    if (cam) return V(cam.a.x, cam.a.y, cam.a.z);
+    if (cam) {
+      // a detection by the camera happened somewhere in its field of view: mark the middle of it
+      const f = forward(cam.rot);
+      return V(cam.a.x + f[0] * cam.reach * 0.5, cam.fe + 0.5, cam.a.z + f[1] * cam.reach * 0.5);
+    }
     const h = this.view.hass, reg = h?.entities?.[entity];
     const area = reg?.area_id || h?.devices?.[reg?.device_id]?.area_id;
     const room = area ? a.rooms.find((r) => r.area === area) : null;
@@ -309,18 +313,25 @@ export class CameraFeature extends Feature {
     this.clearTrail();
     if (!events.length) return;
     const tex = glowTexture();
-    events.forEach((x, i) => {
+    events.forEach((x) => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x19e6ff, transparent: true, opacity: clamp(1 - x.age * 0.85, 0.12, 1), depthTest: false, blending: THREE.AdditiveBlending }));
       s.position.copy(x.pos);
       s.scale.setScalar(0.9 * (1 - 0.55 * x.age) + 0.25);
       s.renderOrder = 8;
       this.trailGroup.add(s);
-      if (events.length - i <= 8) {
-        const c = card3d(`<span>${hhmm(x.t)}</span>`, { cls: "pw" });
-        c.position.copy(x.pos).add(V(0, 0.3, 0));
-        this.trailGroup.add(c);
-        this.trailLabels.push(c);
-      }
+    });
+    // one label per spot with its latest times (several detections share a spot, e.g. everything a camera saw)
+    const spots = new Map();
+    events.forEach((x) => {
+      const k = `${x.pos.x.toFixed(2)}|${x.pos.z.toFixed(2)}`;
+      if (!spots.has(k)) spots.set(k, { pos: x.pos, times: [] });
+      spots.get(k).times.push(x.t);
+    });
+    spots.forEach((sp) => {
+      const c = card3d(`<span>${sp.times.slice(-4).reverse().map(hhmm).join(" · ")}${sp.times.length > 4 ? " …" : ""}</span>`, { cls: "pw" });
+      c.position.copy(sp.pos).add(V(0, 0.3, 0));
+      this.trailGroup.add(c);
+      this.trailLabels.push(c);
     });
     if (events.length > 1) {
       const pts = [], cols = [];

@@ -4,6 +4,7 @@ import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { createFeatures } from "./features/index.js";
 import { openScreenEditor } from "./features/screens-ui.js";
 import { siteFrame, localToPlan, resolveParts, partsFromLayout, doorSpec, stallCenters, PART_LABELS, DOOR_SIDES } from "./lib/site.js";
+import { wedge } from "./lib/camera.js";
 import { CarFeature } from "./features/car.js";
 import { uid, snap, domainOf, clone, inPoly, bbox, distSeg, polyArea, labelPoint, furnitureCorners, rad } from "./util.js";
 import { newFloor, emptyPlan, normalizePlan, elevation, wallNetwork, roofSections, newSiteBuilding, applyLevels } from "./plan.js";
@@ -307,7 +308,11 @@ class HomePlan3DView extends HTMLElement {
     t.innerHTML = "";
     if (roofSections(this.plan).length) t.append(mk("Dach", this.showRoof ? "on" : "", () => { this.showRoof = !this.showRoof; this.renderBar(); this.rebuild3D(); }));
     if (this.plan.site?.buildings?.length) t.append(mk("Gelände", this.showSite ? "on" : "", () => { this.showSite = !this.showSite; this.renderBar(); this.rebuild3D(); this.draw2D(); }, "Weitere Gebäude auf dem Flurstück"));
-    this.features.forEach((f) => { if (f.available()) t.append(mk(f.label, f.on ? "on" : "", () => this.setFx(f.id, !f.on), f.title)); });
+    this.features.forEach((f) => {
+      if (!f.available()) return;
+      t.append(mk(f.label, f.on ? "on" : "", () => this.setFx(f.id, !f.on), f.title));
+      if (f.on) f.toolbar().forEach((b) => t.append(mk(b.label, b.on ? "on" : "", b.fn, b.title)));
+    });
     if (this.features.some((f) => f.usesHolo && f.available())) t.append(mk("◈ Karten", this.holo ? "on" : "", () => { this.holo = !this.holo; this.renderBar(); this.updateStates(); }, "Karten und Hologramme im Raum ein- oder ausblenden"));
     if (this.hasClimate) {
       t.append(mk("🌡 Klima", this.showClimate ? "on" : "", () => { this.showClimate = !this.showClimate; this.renderBar(); this.updateStates(); }, "Temperatur und Luftfeuchte in den Räumen"));
@@ -438,7 +443,16 @@ class HomePlan3DView extends HTMLElement {
       if (obj) selHtml += `<h4>Wand</h4>${this.formHtml(obj, [{ k: "t", l: "Stärke (m)", t: "number", p: "auto" }, { k: "h", l: "Höhe (m, leer = voll)", t: "number" }])}`;
     } else if (s?.kind === "device") {
       obj = find(fl.devices, s.id);
-      if (obj) selHtml += `<h4>Gerät</h4>${this.formHtml(obj, [{ k: "entity", l: "Entität", list: "ents" }, { k: "name", l: "Anzeigename" }, { k: "showName", l: "Name anzeigen", t: "checkbox" }, { k: "y", l: "Höhe (m)", t: "number", p: "auto" }])}`;
+      if (obj) selHtml += `<h4>Gerät</h4>${this.formHtml(obj, [
+        { k: "entity", l: "Entität", list: "ents" }, { k: "name", l: "Anzeigename" }, { k: "showName", l: "Name anzeigen", t: "checkbox" }, { k: "y", l: "Höhe (m)", t: "number", p: "auto" },
+        ...(domainOf(obj.entity) === "camera" ? [
+          { k: "rot", l: "Blickrichtung (° im Uhrzeigersinn, 0 = im Plan nach unten)", t: "number", s: 5, p: "0" },
+          { k: "tilt", l: "Neigung nach unten (°)", t: "number", s: 5, p: "25" },
+          { k: "fov", l: "Öffnungswinkel (°)", t: "number", s: 5, p: "90" },
+          { k: "reach", l: "Reichweite im Plan (m)", t: "number", s: 0.5, p: "7" },
+          { k: "motion", l: "Bewegungsmelder (leer = am Kamera-Gerät suchen)", list: "ents" },
+        ] : []),
+      ])}`;
       else if (this.isAuto(s)) {
         const d = this.itemOf(s);
         if (d) selHtml += `<h4>Gerät (automatisch)</h4><div style="font-size:12px;opacity:.85;word-break:break-all">${esc(d.entity)}</div>
@@ -456,7 +470,7 @@ class HomePlan3DView extends HTMLElement {
     } else if (s?.kind === "furniture") {
       obj = find(fl.furniture, s.id);
       if (obj) selHtml += `<h4>Möbel</h4>${this.formHtml(obj, [
-        { k: "type", l: "Typ", t: "select", o: FURN_TYPES }, { k: "name", l: "Name" }, { k: "rot", l: "Drehung (°)", t: "number", s: 5 },
+        { k: "type", l: "Typ", t: "select", o: FURN_TYPES }, { k: "name", l: "Name" }, { k: "color", l: "Farbe (leer = Standard)", t: "color" }, { k: "rot", l: "Drehung (°)", t: "number", s: 5 },
         { k: "w", l: "Breite", t: "number" }, { k: "d", l: "Tiefe", t: "number" }, { k: "h", l: "Höhe", t: "number" }, { k: "mountY", l: "Höhe über Boden", t: "number", p: "0" },
         { k: "entity", l: "Entität (Zustand/Leuchten)", list: "ents" }, { k: "power", l: "Leistungs-Sensor", list: "ents" },
       ])}${obj.type === "tv" || obj.type === "monitor" ? `<button class="full" id="scr-edit">🖥 Bildschirm-Regeln …</button>` : ""}${obj.type === "car" ? `<button class="full" id="car-edit">🚗 Auto zuordnen …</button>` : ""}`;
@@ -497,7 +511,7 @@ class HomePlan3DView extends HTMLElement {
     if (obj) this.bindForm(side.querySelector('[data-obj="sel"]'), obj, (el) => {
       if (el.dataset.k === "levels" && s?.kind === "site") { applyLevels(this.plan, obj, obj.levels || 1); this.renderSide(); }
       if (el.dataset.k === "height" && s?.kind === "site") { obj.storeys = (obj.storeys || []).filter((e) => e < obj.height - 0.3); }
-      if (el.dataset.k === "type" || el.dataset.k === "style") this.renderSide();
+      if (el.dataset.k === "type" || el.dataset.k === "style" || (el.dataset.k === "entity" && s?.kind === "device")) this.renderSide();
     });
     side.querySelector("[data-plan]")?.addEventListener("change", (e) => { this.plan.settings.autoDevices = e.target.checked; this.changed(); });
     side.querySelector("#grid").onchange = (e) => { this.grid = +e.target.value; };
@@ -917,6 +931,11 @@ class HomePlan3DView extends HTMLElement {
       } else if (d.kind === "furniture") {
         d.glow.visible = on;
         d.mats.forEach((m) => (m.emissiveIntensity = on ? 0.9 : 0.18));
+      } else if (d.kind === "camera") {
+        // the camera feature draws the field of view; the body just glows while the camera is reachable
+        d.glow.visible = false;
+        d.mesh.material.emissive.setHex(s.state === "unavailable" ? 0 : 0x19e6ff);
+        d.mesh.material.emissiveIntensity = 0.55;
       } else {
         let col = new THREE.Color(0xffd08a);
         const a = s.attributes;
@@ -1369,6 +1388,13 @@ class HomePlan3DView extends HTMLElement {
 
     this.deviceList(fl).forEach((d) => {
       const q = w2s([d.x, d.z]);
+      if (domainOf(d.entity) === "camera") {
+        // field of view of a camera
+        const w = wedge(d.x, d.z, d.rot ?? 0, d.fov ?? 90, d.reach ?? 7).map(w2s);
+        x.beginPath(); w.forEach((p, i) => (i ? x.lineTo(...p) : x.moveTo(...p))); x.closePath();
+        x.fillStyle = "rgba(25,230,255,.12)"; x.fill();
+        x.strokeStyle = this.isSel(d.id) ? "#fff" : "rgba(25,230,255,.7)"; x.lineWidth = dpr; x.stroke();
+      }
       x.beginPath(); x.arc(q[0], q[1], 6 * dpr, 0, 7);
       x.fillStyle = d.explicit ? "#ffd08a" : "#88889a"; x.fill();
       x.strokeStyle = this.isSel(d.id) ? "#fff" : "#000"; x.lineWidth = (this.isSel(d.id) ? 3 : 2) * dpr; x.stroke();

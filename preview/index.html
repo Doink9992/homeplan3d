@@ -39,7 +39,11 @@ const states = {
   "media_player.tv": { state: "playing", attributes: { friendly_name: "TV", app_name: "Netflix", media_title: "Dark", entity_picture: "/preview/cover.svg", volume_level: 0.4, source: "HDMI 1", source_list: ["HDMI 1", "HDMI 2"] } },
   "media_player.wohnen_speaker": { state: "playing", attributes: { friendly_name: "Wohnen", media_title: "Neon Nights", media_artist: "Demo Band", entity_picture: "/preview/cover.svg", volume_level: 0.6, group_members: ["media_player.wohnen_speaker", "media_player.kueche"] } },
   "media_player.kueche": { state: "playing", attributes: { friendly_name: "Küche", media_title: "Neon Nights", media_artist: "Demo Band", entity_picture: "/preview/cover.svg", volume_level: 0.3, group_members: ["media_player.wohnen_speaker", "media_player.kueche"] } },
-  "camera.hof": { state: "recording", attributes: { friendly_name: "Hof", entity_picture: "/preview/cam.svg" } },
+  "camera.hof": { state: "recording", attributes: { friendly_name: "Hof", entity_picture: "/preview/cam.svg?token=demo" } },
+  "camera.eingang": { state: "idle", attributes: { friendly_name: "Eingang", entity_picture: "/preview/cam.svg?token=demo2" } },
+  "binary_sensor.hof_person_occupancy": { state: q.get("motion") ? "on" : "off", last_changed: new Date(Date.now() - 120000).toISOString(), attributes: { friendly_name: "Hof Person" } },
+  "binary_sensor.hof_vehicle_occupancy": { state: "off", attributes: { friendly_name: "Hof Fahrzeug" } },
+  "binary_sensor.eingang_motion": { state: "off", attributes: { friendly_name: "Eingang Bewegung", device_class: "motion" } },
   ...energyStates(q.get("energy")),
   "sensor.wohnen_temperatur": { state: "21.4", attributes: dc("temperature", "°C") },
   "sensor.wohnen_feuchte": { state: "47", attributes: dc("humidity", "%") },
@@ -56,6 +60,8 @@ const hass = {
     ...inArea("kueche", "switch.kaffeemaschine", "sensor.kueche_temperatur", "sensor.kueche_feuchte"),
     ...inArea("schlafen", "sensor.schlafen_temperatur"),
     ...Object.fromEntries(["sensor.ev_battery", "sensor.ev_range", "binary_sensor.ev_charging", "sensor.ev_charging_power", "lock.ev_doors", "climate.ev_preheat", "switch.ev_charge", "device_tracker.ev"].map((e) => [e, { device_id: "ev" }])),
+    ...Object.fromEntries(["camera.hof", "binary_sensor.hof_person_occupancy", "binary_sensor.hof_vehicle_occupancy"].map((e) => [e, { device_id: "cam_hof" }])),
+    ...Object.fromEntries(["camera.eingang", "binary_sensor.eingang_motion"].map((e) => [e, { device_id: "cam_eingang" }])),
   },
   devices: {},
   callWS: async (m) => {
@@ -67,6 +73,12 @@ const hass = {
       const out = {}, midnight = new Date(); midnight.setHours(0, 0, 0, 0);
       for (const id of m.entity_ids) {
         out[id] = [];
+        if (/occupancy|motion/.test(id)) {
+          // a few detections in the last half hour
+          const now = Date.now() / 1000, on = id.includes("hof_person");
+          out[id] = on ? [[1700, "off"], [1500, "on"], [1440, "off"], [700, "on"], [640, "off"], [120, q.get("motion") ? "on" : "off"]].map(([a, s]) => ({ s, lu: now - a })) : [{ s: "off", lu: now - 3000 }];
+          continue;
+        }
         for (let i = 0; i <= 96; i++) {
           const t = midnight.getTime() / 1000 + i * 900;
           if (t * 1000 > Date.now()) break;

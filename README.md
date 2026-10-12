@@ -32,6 +32,9 @@ Die Erweiterungen sind eingebaut. Ihre Schalter erscheinen in der Leiste, sobald
 - **⚡ Energie** – animierte Kabel mit Leistungspunkten (Farbe = Art, Tempo = Leistung) zwischen PV, Netz, Akku, Wallbox und Haus, leuchtende Solarmodule, eine Hologramm-Karte (PV, Haus, Netz, Akku, Autarkie, Gas/Wasser, Tageskurve) und Leistungskarten an Geräten. Einrichten unter **⚙ Funktionen → Energie**, auch per **Übernehmen vom Energie-Dashboard**. Als Möbeltypen helfen `meter`, `grid_point`, `battery` und `wallbox` für die Knotenpunkte der Kabel.
 - **🚗 Auto** – Möbeltyp `car`: Lichtband nach Ladestand, Pin mit Ladestand, Reichweite, Ladeleistung und Verriegelung, Karte mit Schaltern für Verriegelung, Klima und Laden. Eine Entität des Autos genügt, die übrigen werden am selben Gerät gefunden (Möbel anklicken, **🚗 Auto zuordnen …**).
 
+- **🎥 Kameras** – Geräte vom Typ `camera` zeigen ihr **Sichtfeld** auf dem Boden (rot bei Bewegung), **Erkennungs-Pins** (Person, Fahrzeug, Tier, Paket, Bewegung mit Uhrzeit) und ein Standbild beim Antippen mit Live-Ansicht. **👁 Durch die Kamera sehen** fliegt in die Kamera und blendet ihr Bild über die 3D-Szene (Drehung und Neigung lassen sich dabei einstellen und speichern). **🖼 Wand** zeigt alle Kameras als Raster, **👣 Spur** die Bewegung der letzten 30 Minuten. Drehung, Neigung, Öffnungswinkel und Reichweite stellst du am Gerät ein; Melder werden am selben HA-Gerät gefunden (oder dort eingetragen).
+- **Autos und Farben** – Möbel haben ein Farbfeld; ein Auto (`car`) ohne Fahrzeug-Integration zeigt einfach seinen Namen, zum Beispiel für die Carport-Stellplätze.
+
 ## Geräte verschieben und entfernen
 
 Im Editor (↖ Auswahl) funktioniert alles mit der Maus:

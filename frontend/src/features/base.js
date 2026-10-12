@@ -17,6 +17,8 @@ export class Feature {
   get title() { return ""; }
   /** Show a toggle for this feature? */
   available() { return false; }
+  /** Extra toolbar buttons while the feature is on: [{ label, title, on, fn }]. */
+  toolbar() { return []; }
   build(_anchors) {}
   update(_states) {}
   tick(_dt, _t) {}

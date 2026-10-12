@@ -38,7 +38,8 @@ floors[]  { id, name, elevation?, height, rooms[], walls[], openings[], devices[
   walls[]      { id, a, b, t, h }                      freie Wände
   openings[]   { id, type door|window, x, z, rot, w, h, sill, style, hinge, swing, entity }
   devices[]    { id, entity, x, z, y, name, showName }
-  furniture[]  { id, type, x, z, rot, w, d, h, mountY, name, entity, power }
+  furniture[]  { id, type, x, z, rot, w, d, h, mountY, name, color?, entity, power }
+  devices[]    camera.*: + rot, tilt, fov, reach, motion (Sichtfeld, Melder)
 settings  { wallExterior, wallInterior, slab, autoDevices, hiddenEntities[], roof{sections,solar,windows}, north }
 site      { north, cadastreHouse, buildings[ { id, name, points, height, levels, storeys, roof{type,pitch,overhang,high}, visible,
                                              parts[], pv{} } ] }
