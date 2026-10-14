@@ -50,6 +50,11 @@ export function kindsFromEvents(events, key) {
   return [...out];
 }
 
+/** All waste calendars that are available (several years / several streams can live in separate calendars). */
+function wasteCalendars(states) {
+  return Object.keys(states).filter((e) => e.startsWith("calendar.") && states[e].state !== "unavailable" && /müll|muell|abfall|waste|leerung/i.test(`${e} ${states[e].attributes?.friendly_name || ""}`));
+}
+
 /**
  * The entity that knows the collection dates: the configured one, else a sensor with several date attributes
  * (preferring "Leerung" in its name), else a waste calendar. Returns { entity, type: "sensor" | "calendar" } or null.
@@ -60,6 +65,19 @@ export function findSource(states, configured) {
   const score = (e) => (/leerung|abfall|müll|muell|waste/i.test(`${e} ${states[e].attributes?.friendly_name || ""}`) ? 1 : 0) * 100 + isoKeys(states[e].attributes).length;
   sensors.sort((a, b) => score(b) - score(a));
   if (sensors.length) return { entity: sensors[0], type: "sensor" };
-  const cals = Object.keys(states).filter((e) => e.startsWith("calendar.") && states[e].state !== "unavailable" && /müll|muell|abfall|waste|leerung/i.test(`${e} ${states[e].attributes?.friendly_name || ""}`));
+  const cals = wasteCalendars(states);
   return cals.length ? { entity: cals[0], type: "calendar" } : null;
+}
+
+/**
+ * Every entity to read the dates from. `configured` may be one entity, a comma separated list or an array; without it
+ * the best date sensor, else ALL waste calendars (a calendar per year, e.g. "Müll26" and "Müll27", are read together).
+ */
+export function findSources(states, configured) {
+  const list = (Array.isArray(configured) ? configured : String(configured ?? "").split(/[\s,;]+/)).filter((e) => e && states[e]);
+  if (list.length) return list.map((entity) => ({ entity, type: entity.startsWith("calendar.") ? "calendar" : "sensor" }));
+  const first = findSource(states, null);
+  if (!first) return [];
+  if (first.type === "sensor") return [first];
+  return wasteCalendars(states).map((entity) => ({ entity, type: "calendar" }));
 }

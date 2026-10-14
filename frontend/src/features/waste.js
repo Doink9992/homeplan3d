@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Feature, glowTexture } from "./base.js";
-import { binKind, dateKey, findSource, kindsFromAttributes, kindsFromEvents, KINDS } from "../lib/waste.js";
+import { binKind, dateKey, findSources, kindsFromAttributes, kindsFromEvents, KINDS } from "../lib/waste.js";
 import { openSettings } from "./settings-ui.js";
 
 /**
@@ -36,27 +36,34 @@ export class WasteFeature extends Feature {
     });
     this.cal = null;
     this.calAt = 0;
+    this.calKey = null;
     this.kinds = new Set();
   }
 
-  /** Kinds collected on the target day, from the configured / detected source. */
+  /** Kinds collected on the target day, from the configured / detected sources (all sensors and all calendars together). */
   collect(states) {
     const c = this.cfg(), key = dateKey(Date.now(), c.days);
-    const src = findSource(states, c.entity);
-    this.src = src;
-    if (!src) return new Set();
-    if (src.type === "sensor") return new Set(kindsFromAttributes(states[src.entity]?.attributes, key));
-    // calendar: fetch the day's events now and then
-    const now = Date.now();
-    if (now - this.calAt > 30 * 60000 && this.view.hass?.callApi) {
-      this.calAt = now;
-      const start = new Date(); start.setDate(start.getDate() + c.days); start.setHours(0, 0, 0, 0);
-      const end = new Date(start); end.setDate(end.getDate() + 1);
-      this.view.hass.callApi("GET", `calendars/${src.entity}?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`)
-        .then((ev) => { this.cal = kindsFromEvents(ev, key); this.update(this.states); })
-        .catch(() => { this.cal = []; });
+    const srcs = findSources(states, c.entity);
+    this.srcs = srcs;
+    this.src = srcs[0] || null;
+    const out = new Set();
+    for (const s of srcs) if (s.type === "sensor") kindsFromAttributes(states[s.entity]?.attributes, key).forEach((k) => out.add(k));
+    const cals = srcs.filter((s) => s.type === "calendar");
+    if (cals.length) {
+      // calendars: fetch the day's events now and then (and again when the target day changes)
+      const now = Date.now();
+      if ((now - this.calAt > 30 * 60000 || this.calKey !== key) && this.view.hass?.callApi) {
+        this.calAt = now;
+        this.calKey = key;
+        const start = new Date(); start.setDate(start.getDate() + c.days); start.setHours(0, 0, 0, 0);
+        const end = new Date(start); end.setDate(end.getDate() + 1);
+        const q = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+        Promise.all(cals.map((s) => this.view.hass.callApi("GET", `calendars/${s.entity}?${q}`).then((ev) => kindsFromEvents(ev, key)).catch(() => [])))
+          .then((all) => { this.cal = [...new Set(all.flat())]; this.update(this.states); });
+      }
+      (this.cal || []).forEach((k) => out.add(k));
     }
-    return new Set(this.cal || []);
+    return out;
   }
 
   update(states) {
@@ -103,9 +110,9 @@ export class WasteFeature extends Feature {
     openSettings(this.view, {
       title: "🗑 Müllabfuhr",
       obj,
-      note: `Quelle der Abholtermine: ein Sensor, dessen Attribute Datum → Müllart enthalten (Waste Collection Schedule), oder ein Müll-Kalender. Leer = automatisch${this.src ? ` (gefunden: ${this.src.entity})` : ""}. Die Tonnen sind Möbel vom Typ <b>bin</b>; Blau = Papier, Gelb = Gelber Sack, Schwarz = Restmüll, Braun = Bio, erkannt am Namen.`,
+      note: `Quelle der Abholtermine: ein Sensor, dessen Attribute Datum → Müllart enthalten (Waste Collection Schedule), oder ein Müll-Kalender. Leer = automatisch (alle Müll-Kalender zusammen, z. B. ein Kalender je Jahr${this.srcs?.length ? `; gefunden: ${this.srcs.map((x) => x.entity).join(", ")}` : ""}). Mehrere Quellen mit Komma trennen. Die Tonnen sind Möbel vom Typ <b>bin</b>; Blau = Papier, Gelb = Gelber Sack, Schwarz = Restmüll, Braun = Bio, erkannt am Namen.`,
       fields: [
-        { k: "entity", l: "Sensor oder Kalender (leer = automatisch)", t: "entity", p: "sensor.naechste_leerung" },
+        { k: "entity", l: "Sensor oder Kalender, mehrere mit Komma (leer = automatisch)", t: "entity", p: "sensor.naechste_leerung" },
         { k: "days", l: "Tage vor der Abholung leuchten", t: "number", s: 1 },
       ],
     });

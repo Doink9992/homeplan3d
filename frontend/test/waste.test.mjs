@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { kindsOf, binKind, dateKey, kindsFromAttributes, kindsFromEvents, findSource } from "../src/lib/waste.js";
+import { kindsOf, binKind, dateKey, kindsFromAttributes, kindsFromEvents, findSource, findSources } from "../src/lib/waste.js";
 
 test("collection texts map to bin kinds", () => {
   assert.deepEqual(kindsOf("BioMüll"), ["bio"]);
@@ -47,4 +47,20 @@ test("finds the source: configured, date sensor, calendar", () => {
   delete states["sensor.nachste_leerung"]; delete states["sensor.other"];
   assert.deepEqual(findSource(states), { entity: "calendar.muell", type: "calendar" });
   assert.equal(findSource({}), null);
+});
+
+test("findSources reads every waste calendar (one per year) and honours a list", () => {
+  const states = {
+    "calendar.ics_2": { state: "unavailable", attributes: { friendly_name: "Müll 25" } },
+    "calendar.ics_3": { state: "on", attributes: { friendly_name: "Waste Collection Schedule Müll26" } },
+    "calendar.mull27": { state: "off", attributes: { friendly_name: "Müll27" } },
+    "calendar.privat": { state: "on", attributes: { friendly_name: "Privat" } },
+    "sensor.restmull": { state: "unknown", attributes: { friendly_name: "Restmüll" } },
+  };
+  assert.deepEqual(findSources(states).map((s) => s.entity), ["calendar.ics_3", "calendar.mull27"]);
+  assert.deepEqual(findSources(states, "calendar.mull27, calendar.ics_3").map((s) => s.entity), ["calendar.mull27", "calendar.ics_3"]);
+  assert.deepEqual(findSources(states, ["calendar.mull27", "calendar.gibtsnicht"]).map((s) => s.entity), ["calendar.mull27"]);
+  states["sensor.leerung"] = { state: "x", attributes: { "2026-10-14": "BioMüll", "2026-10-21": "Restmüll" } };
+  assert.deepEqual(findSources(states), [{ entity: "sensor.leerung", type: "sensor" }]);
+  assert.deepEqual(findSources({}), []);
 });
