@@ -24,7 +24,7 @@ export class SoundFeature extends Feature {
       this.players.push({ entity, x, y, z, floor });
     };
     anchors.devices.forEach((d) => add(d.entity, d.x, d.y, d.z, d.floor));
-    anchors.furniture.forEach((a) => add(a.f.entity, a.x, a.top + 0.05, a.z, a.floor));
+    anchors.furniture.filter((a) => !a.other).forEach((a) => add(a.f.entity, a.x, a.top + 0.05, a.z, a.floor));
 
     const ringMat = (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
     this.players.forEach((p) => {

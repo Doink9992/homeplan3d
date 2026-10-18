@@ -244,7 +244,7 @@ function buildFurniture(f, elev, ctx) {
 
   const entry = { mats, group: g };
   const top = y0 + h + (f.baseY || 0);
-  ctx.anchors.furniture.push({ f, floor: ctx.cur.i, x: f.x, z: f.z, y: ctx.cur.elev + y0 + (f.baseY || 0), top: ctx.cur.elev + top, w, d, h, group: g, mats });
+  ctx.anchors.furniture.push({ f, floor: ctx.cur.i, other: !!ctx.cur.other, x: f.x, z: f.z, y: ctx.cur.elev + y0 + (f.baseY || 0), top: ctx.cur.elev + top, w, d, h, group: g, mats });
   if (f.entity || f.stateEntity) {
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex(), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     glow.scale.setScalar(Math.max(1, w * 2));
@@ -253,7 +253,7 @@ function buildFurniture(f, elev, ctx) {
     g.add(glow);
     ctx.dyn.push({ kind: "furniture", entity: f.entity || f.stateEntity, mats, glow, baseScale: glow.scale.x });
   }
-  if (f.power) {
+  if (f.power && !ctx.cur.other) {
     const sp = valueSprite();
     sp.position.set(0, top + 0.35, 0);
     g.add(sp);
@@ -884,9 +884,11 @@ export function buildBuilding(plan, opts) {
   plan.floors.forEach((fl, i) => {
     if (i > opts.maxFloor) return;
     const elev = elevation(plan, i);
-    ctx.cur = { elev, i };
+    // a floor below the selected one is only context: its live values (climate, power, devices) are left out
+    const other = i < opts.maxFloor && opts.maxFloor !== Infinity;
+    ctx.cur = { elev, i, other };
     const g = new THREE.Group();
-    const dim = i < opts.maxFloor && opts.maxFloor !== Infinity ? 0.7 : 1;
+    const dim = other ? 0.7 : 1;
 
     // floors + slabs
     const holes = stairHoles(plan, i);
@@ -912,7 +914,7 @@ export function buildBuilding(plan, opts) {
         g.add(sp);
       }
       // temperature / humidity (live): label above the room, optional floor tint
-      const cl = opts.climateFor?.(r);
+      const cl = other ? null : opts.climateFor?.(r);
       if (cl && (cl.temperature || cl.humidity || cl.co2)) {
         const lp = labelPoint(r.points);
         const sp = valueSprite(448);
@@ -946,7 +948,7 @@ export function buildBuilding(plan, opts) {
     fl.furniture.forEach((f) => g.add(buildFurniture(f, 0, ctx)));
 
     // devices
-    opts.devicesFor(fl).forEach((d) => {
+    (other ? [] : opts.devicesFor(fl)).forEach((d) => {
       const dom = domainOf(d.entity);
       const y = d.y ?? (dom === "light" ? fl.height - 0.4 : dom === "camera" ? Math.min(2.4, fl.height - 0.25) : 0.9);
       const geo = dom === "light" ? new THREE.SphereGeometry(0.14, 16, 12) : dom === "cover" ? new THREE.BoxGeometry(0.5, 0.08, 0.08) : new THREE.BoxGeometry(0.22, 0.22, 0.22);

@@ -94,7 +94,7 @@ export class EnergyFeature extends Feature {
     this.holo.visible = false;
 
     // device power cards
-    this.devCards = anchors.furniture.filter((a) => a.f.power).map((a) => {
+    this.devCards = anchors.furniture.filter((a) => a.f.power && !a.other).map((a) => {
       const c = card3d(`<span>⚡ <b>– W</b></span>`, { cls: "pw" });
       c.position.set(a.x, a.top + 0.45, a.z);
       c.visible = false;
