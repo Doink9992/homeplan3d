@@ -127,17 +127,29 @@ export class EnergyFeature extends Feature {
   // ---------------------------------------------------------- data
   async loadCurve() {
     const c = this.effective();
-    if ((!c.solar && !c.grid) || !this.view.hass?.callWS) return;
+    if ((!c.solar && !c.grid && !c.consumption) || !this.view.hass?.callWS) return;
     try {
       const t1 = new Date(), t0 = new Date(t1);
       t0.setHours(0, 0, 0, 0);
-      const ents = [c.solar, c.grid].filter(Boolean);
+      const ents = [c.solar, c.grid, c.consumption].filter(Boolean);
       const h = await fetchHistory(this.view.hass, ents, t0, t1);
       if (c.grid) {
         // grid import today: only the positive (import) part of the grid power is integrated
         const sign = c.grid_invert ? -1 : 1;
         const gp = numericPoints(h[c.grid]).map((p) => ({ ...p, v: Math.max(0, this.unitW(c.grid, p.v) * sign) }));
         this.importKwh = integrateKwh(gp, t0.getTime(), t1.getTime());
+      } else if (c.consumption && !c.battery) {
+        // no grid sensor: the card derives grid = house - PV, so integrate the same thing from history
+        const hp = numericPoints(h[c.consumption]).map((p) => ({ ...p, v: this.unitW(c.consumption, p.v) }));
+        const sp = c.solar ? numericPoints(h[c.solar]).map((p) => ({ ...p, v: this.unitW(c.solar, p.v) })) : [];
+        let hi = 0, si = 0, hv = 0, sv = 0;
+        const ts = [...new Set([...hp, ...sp].map((p) => p.t))].sort((x, y) => x - y);
+        const gpts = ts.map((t) => {
+          while (hi < hp.length && hp[hi].t <= t) hv = hp[hi++].v;
+          while (si < sp.length && sp[si].t <= t) sv = sp[si++].v;
+          return { t, v: Math.max(0, hv - sv) };
+        });
+        this.importKwh = integrateKwh(gpts, t0.getTime(), t1.getTime());
       }
       if (!c.solar) { this.update(this.states); return; }
       const pts = numericPoints(h[c.solar]).map((p) => ({ ...p, v: this.unitW(c.solar, p.v) }));
@@ -193,7 +205,7 @@ export class EnergyFeature extends Feature {
     const rows = [];
     if (p.solar != null || this.pvEntity) rows.push(row("☀", "PV", fmtPower(f.S), this.yieldKwh != null ? `heute ${this.yieldKwh.toFixed(1).replace(".", ",")} kWh` : ""));
     rows.push(row("🏠", "Haus", fmtPower(f.H)));
-    if (p.grid != null || p.consumption != null) rows.push(row("🔌", "Netz", fmtPower(Math.abs(f.g)), [this.importKwh != null && p.grid != null ? `heute ${this.importKwh.toFixed(1).replace(".", ",")} kWh Bezug` : "", f.g > 10 ? "Bezug" : f.g < -10 ? "Einspeisung" : ""].filter(Boolean).join(" · ")));
+    if (p.grid != null || p.consumption != null) rows.push(row("🔌", "Netz", fmtPower(Math.abs(f.g)), [this.importKwh != null ? `heute ${this.importKwh.toFixed(1).replace(".", ",")} kWh Bezug` : "", f.g > 10 ? "Bezug" : f.g < -10 ? "Einspeisung" : ""].filter(Boolean).join(" · ")));
     if (p.battery != null || p.soc != null) rows.push(row("🔋", p.soc != null ? `${Math.round(p.soc)} %` : "Akku", fmtPower(Math.abs(f.b)), f.b > 10 ? "entlädt" : f.b < -10 ? "lädt" : ""));
     if (p.wallbox != null && p.wallbox > 10) rows.push(row("🚗", "Wallbox", fmtPower(p.wallbox)));
     if (f.H > 0) rows.push(row("🌱", "Autarkie", `${Math.round(f.autarky * 100)} %`));
