@@ -136,8 +136,9 @@ export class EnergyFeature extends Feature {
       if (c.grid) {
         // grid import today: only the positive (import) part of the grid power is integrated
         const sign = c.grid_invert ? -1 : 1;
-        const gp = numericPoints(h[c.grid]).map((p) => ({ ...p, v: Math.max(0, this.unitW(c.grid, p.v) * sign) }));
-        this.importKwh = integrateKwh(gp, t0.getTime(), t1.getTime());
+        const gAll = numericPoints(h[c.grid]).map((p) => ({ ...p, v: this.unitW(c.grid, p.v) * sign }));
+        this.importKwh = integrateKwh(gAll.map((p) => ({ ...p, v: Math.max(0, p.v) })), t0.getTime(), t1.getTime());
+        this.exportKwh = integrateKwh(gAll.map((p) => ({ ...p, v: Math.max(0, -p.v) })), t0.getTime(), t1.getTime());
       } else if (c.consumption && !c.battery) {
         // no grid sensor: the card derives grid = house - PV, so integrate the same thing from history
         const hp = numericPoints(h[c.consumption]).map((p) => ({ ...p, v: this.unitW(c.consumption, p.v) }));
@@ -147,9 +148,10 @@ export class EnergyFeature extends Feature {
         const gpts = ts.map((t) => {
           while (hi < hp.length && hp[hi].t <= t) hv = hp[hi++].v;
           while (si < sp.length && sp[si].t <= t) sv = sp[si++].v;
-          return { t, v: Math.max(0, hv - sv) };
+          return { t, v: hv - sv };
         });
-        this.importKwh = integrateKwh(gpts, t0.getTime(), t1.getTime());
+        this.importKwh = integrateKwh(gpts.map((p) => ({ ...p, v: Math.max(0, p.v) })), t0.getTime(), t1.getTime());
+        this.exportKwh = integrateKwh(gpts.map((p) => ({ ...p, v: Math.max(0, -p.v) })), t0.getTime(), t1.getTime());
       }
       if (!c.solar) { this.update(this.states); return; }
       const pts = numericPoints(h[c.solar]).map((p) => ({ ...p, v: this.unitW(c.solar, p.v) }));
@@ -205,7 +207,11 @@ export class EnergyFeature extends Feature {
     const rows = [];
     if (p.solar != null || this.pvEntity) rows.push(row("☀", "PV", fmtPower(f.S), this.yieldKwh != null ? `heute ${this.yieldKwh.toFixed(1).replace(".", ",")} kWh` : ""));
     rows.push(row("🏠", "Haus", fmtPower(f.H)));
-    if (p.grid != null || p.consumption != null) rows.push(row("🔌", "Netz", fmtPower(Math.abs(f.g)), [this.importKwh != null ? `heute ${this.importKwh.toFixed(1).replace(".", ",")} kWh Bezug` : "", f.g > 10 ? "Bezug" : f.g < -10 ? "Einspeisung" : ""].filter(Boolean).join(" · ")));
+    if (p.grid != null || p.consumption != null) {
+      const kwh = (v) => v.toFixed(1).replace(".", ",");
+      rows.push(row("🔌", "Netz", fmtPower(Math.max(0, f.g)), this.importKwh != null ? `heute ${kwh(this.importKwh)} kWh Bezug` : f.g > 10 ? "Bezug" : ""));
+      if (f.g < -10 || (this.exportKwh != null && this.exportKwh >= 0.05)) rows.push(row("↗", "Einspeisung", fmtPower(Math.max(0, -f.g)), this.exportKwh != null ? `heute ${kwh(this.exportKwh)} kWh` : ""));
+    }
     if (p.battery != null || p.soc != null) rows.push(row("🔋", p.soc != null ? `${Math.round(p.soc)} %` : "Akku", fmtPower(Math.abs(f.b)), f.b > 10 ? "entlädt" : f.b < -10 ? "lädt" : ""));
     if (p.wallbox != null && p.wallbox > 10) rows.push(row("🚗", "Wallbox", fmtPower(p.wallbox)));
     if (f.H > 0) rows.push(row("🌱", "Autarkie", `${Math.round(f.autarky * 100)} %`));
