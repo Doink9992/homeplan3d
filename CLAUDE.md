@@ -51,7 +51,7 @@ site      { north, cadastreHouse, buildings[ { id, name, points, height, levels,
   site.groundY Höhe des Hofs (z. B. -1.7). Gebäude mit levels > 1 / baseY behalten Höhen ab ±0,00 und reichen bis zum Hof; andere stehen auf dem Hof. Möbel/Geräte im Hof: baseY bzw. y, Kameras: groundY
   site.yard    { points[[x,z]], pits?[{points, y, openEdges?[]}] } Hofboden mit Kopfsteinpflaster (Textur wird erzeugt), liegt auf groundY; pits = tiefer liegende Flächen (z. B. Kellerabgang) mit eigenem Boden und Wänden
   site.gates[] { name, entity?, single? (ein Flügel = Türchen), barsA?, a[x,z], b[x,z], h?, inward? [dx,dz] (Aufschwenken, Standard Osten), openStates?, closedStates? } Doppeltor; Zustand "Auf"/"Zu" z. B. von einer Frigate-Zustandsklassifizierung
-  balconies[]  { name?, points[[x,z]] (Kante 0 liegt an der Wand), elev? (Standard: erstes Geschoss), rail? }
+  balconies[]  { name?, points[[x,z]] (Kante 0 liegt an der Wand), elev? (Standard: erstes Geschoss), rail?, lights? { entity, color?, spacing?, sag? } (Lichterkette über dem Geländer, leuchtet bei „an“) }
   pv{}         { enabled, fill, rows, cols, orientation, over ("#<Index eines Teils>"), edge, wp, entity }
 ```
 

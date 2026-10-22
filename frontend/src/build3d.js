@@ -725,6 +725,40 @@ export function buildSite(plan, ctx, opts = {}) {
       sp.position.set(c[0], e + 0.06, c[1]);
       group.add(sp);
     }
+    // string of lights over the railing (bc.lights: { entity, color?, spacing?, sag? }), lit while the entity is on
+    if (bc.lights) {
+      const L = bc.lights, spacing = L.spacing ?? 0.22, sag = L.sag ?? 0.12, yTop = e + rail + 0.05;
+      const bulbGeo = new THREE.SphereGeometry(0.035, 8, 6);
+      const mats = [], glows = [];
+      const warm = new THREE.Color(L.color || "#ffd27a");
+      for (let i = 0; i < bc.points.length; i++) {
+        if (skip.includes(i)) continue;
+        const p = bc.points[i], q = bc.points[(i + 1) % bc.points.length];
+        const len = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(2, Math.round(len / spacing));
+        const pts = [];
+        for (let k = 0; k <= n; k++) {
+          const t = k / n, x = p[0] + (q[0] - p[0]) * t, z = p[1] + (q[1] - p[1]) * t, y = yTop - sag * 4 * t * (1 - t); // hangs between the corner posts
+          pts.push(new THREE.Vector3(x, y, z));
+          if (k > 0 && k < n) {
+            const m = new THREE.MeshStandardMaterial({ color: 0x3a3320, emissive: warm, emissiveIntensity: 0.05 });
+            const bulb = new THREE.Mesh(bulbGeo, m);
+            bulb.position.set(x, y, z);
+            bulb.userData = { entity: L.entity, site: owner };
+            group.add(bulb);
+            ctx.pickables.push(bulb);
+            mats.push(m);
+            const gs = new THREE.Sprite(new THREE.SpriteMaterial({ map: opts.glowTex?.(), color: warm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+            gs.position.set(x, y, z);
+            gs.scale.setScalar(0.45);
+            gs.visible = false;
+            group.add(gs);
+            glows.push(gs);
+          }
+        }
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x6b6040, transparent: true, opacity: 0.8 })));
+      }
+      if (L.entity) ctx.dyn.push({ kind: "lightstring", entity: L.entity, mats, glows, warm });
+    }
   };
   // terraces and other platforms that belong to the main house (site.decks), on the level of the floor they open from
   (plan.site?.decks || []).forEach((d) => addDeck(d, d.elev ?? 0, "deck"));

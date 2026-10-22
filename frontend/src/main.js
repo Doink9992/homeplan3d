@@ -973,6 +973,10 @@ class HomePlan3DView extends HTMLElement {
       } else if (d.kind === "furniture") {
         d.glow.visible = on;
         d.mats.forEach((m) => (m.emissiveIntensity = on ? 0.9 : 0.18));
+      } else if (d.kind === "lightstring") {
+        // a string of lights: bulbs glow warm while the switch is on
+        d.mats.forEach((m) => { m.emissiveIntensity = on ? 1.8 : 0.05; });
+        d.glows.forEach((g) => { g.visible = on; });
       } else if (d.kind === "camera") {
         // the camera feature draws the field of view; the body just glows while the camera is reachable
         d.glow.visible = false;
